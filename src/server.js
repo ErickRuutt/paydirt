@@ -8,7 +8,8 @@ import { ownershipFor } from './ownership.js';
 import { reachFor, reachWithin, blockGroupsGeoJSON, hasDemographics } from './demographics.js';
 import { getIsochrones, contoursByMinutes, pointInGeometry, hasMapbox } from './isochrone.js';
 import { KEY_FIELDS } from './candidates.js';
-import { listProjects, getProject, createProject, updateProject, projectHistory, reviewParcel, setSaved, orgSaved, projectCandidates, projectCandidate, REVIEW_STATUSES } from './projects.js';
+import { specToChips, applyChipEdit, CHIP_CATALOG } from './chips.js';
+import { previewCount, listProjects, getProject, createProject, updateProject, projectHistory, reviewParcel, setSaved, orgSaved, projectCandidates, projectCandidate, REVIEW_STATUSES } from './projects.js';
 import { ensureUser } from './identity.js';
 import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS, TAG_LABELS } from './spec.js';
 import { draftFromText, interviewTurn, hasClaude } from './compiler.js';
@@ -20,8 +21,9 @@ app.use(express.json({ limit: '1mb' })); // briefs can be long
 app.use(express.static(new URL('../public/', import.meta.url).pathname));
 
 const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((err) => {
-  res.status(err.status ?? 500).json({ error: err.message });
+  res.status(err.status ?? 500).json({ error: err.message, ...(err.project ? { project: withChips(err.project) } : {}) });
 });
+const withChips = (p) => (p?.spec ? { ...p, chips: specToChips(p.spec) } : p);
 // Sign-in: the page and its static files are public; every /api route except the key lookup needs a Clerk session.
 app.get('/api/auth-config', (req, res) => res.json({ publishableKey: process.env.CLERK_PUBLISHABLE_KEY ?? null }));
 app.use('/api', clerkMiddleware(), (req, res, next) => {
@@ -70,17 +72,29 @@ const projectOr404 = async (id, req) => {
   return p;
 };
 app.get('/api/projects', wrap(async (req, res) => res.json({
-  projects: await listProjects(req.user.orgUid),
-  catalog: { requirements: REQUIREMENT_FIELDS, preferences: PREFERENCE_FIELDS, signals: SIGNAL_LABELS, tags: TAG_LABELS },
+  projects: (await listProjects(req.user.orgUid)).map(withChips),
+  catalog: { requirements: REQUIREMENT_FIELDS, preferences: PREFERENCE_FIELDS, signals: SIGNAL_LABELS, tags: TAG_LABELS, criteria: CHIP_CATALOG },
 })));
-const SOURCES = new Set(['form', 'markdown', 'interview']);
+const SOURCES = new Set(['form', 'markdown', 'interview', 'chip', 'undo']);
 const sourceOf = (b) => (SOURCES.has(b?.source) ? b.source : 'form');
 app.post('/api/projects', wrap(async (req, res) => res.json(await createProject(req.body ?? {}, req.user, sourceOf(req.body)))));
 app.get('/api/projects/:id', wrap(async (req, res) => {
   const p = await projectOr404(req.params.id, req);
-  res.json({ ...p, history: await projectHistory(p.id) });
+  res.json({ ...withChips(p), history: await projectHistory(p.id) });
 }));
-app.put('/api/projects/:id', wrap(async (req, res) => res.json(await updateProject(req.params.id, req.body ?? {}, req.user, sourceOf(req.body)))));
+// A body may carry a whole spec, or one chip edit ({ chip: { key, edit } }) applied to the current spec.
+// baseVersion is the version the person was looking at; a stale one is refused with the current project.
+const specFrom = (p, body) => (body?.chip ? applyChipEdit(p.spec, body.chip.key, body.chip.edit) : body?.spec);
+app.put('/api/projects/:id', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id, req);
+  const body = req.body ?? {};
+  const saved = await updateProject(p.id, { ...body, spec: specFrom(p, body) }, req.user, body.chip ? 'chip' : sourceOf(body));
+  res.json({ ...withChips(saved), history: await projectHistory(p.id) });
+}));
+app.post('/api/projects/:id/preview', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id, req);
+  res.json({ count: await previewCount(p, specFrom(p, req.body) ?? p.spec, { hidePassed: req.body?.hidePassed !== false }) });
+}));
 
 // Drafts: Claude turns a brief or an interview into criteria. Nothing is saved until a person applies it.
 app.post('/api/drafts/from-text', wrap(async (req, res) => {

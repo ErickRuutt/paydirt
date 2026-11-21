@@ -84,6 +84,8 @@ export const FIELD_HOUSE_SPEC = {
 const num = (v) => (v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 const text = (v, n = 500) => String(v ?? '').slice(0, n);
 
+export const PENDING_KEYS = ['drive_time', 'buildable', 'other_use_zoning', 'listed_for_sale'];
+
 export function normalizeSpec(input) {
   const errors = [];
   const s = typeof input === 'string' ? JSON.parse(input) : (input ?? {});
@@ -120,7 +122,12 @@ export function normalizeSpec(input) {
     const params = mergeParams(def.params, p.params ?? {});
     out.preferences.push({ field: p.field, weight, params, why: text(p.why) });
   }
-  if (!out.preferences.some((p) => p.weight > 0)) errors.push('Add at least one preference with a weight above 0, or nothing can be ranked.');
+  // Criteria Paydirt can't check yet (drive time, buildable acres…): kept so nothing the user asked for is lost.
+  out.pending = [];
+  for (const [i, x] of (Array.isArray(s.pending) ? s.pending : []).entries()) {
+    if (!PENDING_KEYS.includes(x?.key)) { errors.push(`Not-yet-checked item ${i + 1}: unknown kind "${x?.key}".`); continue; }
+    out.pending.push({ key: x.key, value: text(x.value, 300) });
+  }
   return { spec: out, errors };
 }
 
@@ -203,7 +210,8 @@ export function compileSpec(spec) {
     subs.push({ key, field: p.field, label: PREFERENCE_FIELDS[p.field].label, weight: p.weight, sql: `ROUND(${clamp(`COALESCE(${e}, 0)`)})::int AS ${key}` });
   }
   const totalW = subs.reduce((a, s) => a + s.weight, 0) || 1;
-  let scoreExpr = subs.length ? subs.map((s) => `${s.key} * ${s.weight / totalW}`).join(' + ') : '0';
+  // With no Nice criteria every site that passes the Must criteria is a full match.
+  let scoreExpr = subs.length && subs.some((x) => x.weight > 0) ? subs.map((s) => `${s.key} * ${s.weight / totalW}`).join(' + ') : '100';
   // Cap: a site with a business running on it (and no sign it's closing) never ranks above the cap.
   if (capWhenOperating != null) scoreExpr = `LEAST(${scoreExpr}, CASE WHEN tags LIKE '%"operating-business"%' AND tags NOT LIKE '%"closing-tenant"%' THEN ${Number(capWhenOperating)} ELSE 100 END)`;
   return {

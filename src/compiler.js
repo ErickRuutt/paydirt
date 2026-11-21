@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { one, run, totalSpend } from './db.js';
-import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS, normalizeSpec } from './spec.js';
+import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS, PENDING_KEYS, normalizeSpec } from './spec.js';
 
 // Turns words (a markdown brief, or an interview) into a draft criteria spec for a person to approve.
 // Nothing here saves a project: the caller shows the draft and the person decides.
@@ -46,7 +46,11 @@ const Draft = z.object({
   requirements: z.array(Requirement),
   preferences: z.array(Preference),
   questions: z.array(z.string()).describe('Things that are unclear or missing and would change the criteria. Ask, never guess.'),
-  unsupported: z.array(z.string()).describe('Wishes the catalog cannot express yet (e.g. school ratings, slope limits, drive time from a point), so the person knows they are not applied.'),
+  pending: z.array(z.object({
+    key: z.enum(PENDING_KEYS).describe('drive_time: travel time from a place; buildable: slope, wetlands or flood limits; other_use_zoning: zoning for any use other than a sports facility; listed_for_sale: only sites on the market.'),
+    value: z.string().describe('What the person asked for, in their words, e.g. "Within 30 minutes of Redmond".'),
+  })).describe('Wishes that match one of these not-yet-checkable kinds. They are saved on the project and shown as "not checked yet".'),
+  unsupported: z.array(z.string()).describe('Other wishes the catalog cannot express yet (e.g. school ratings), so the person knows they are not applied.'),
   summary: z.string().describe('One or two sentences on what this draft does.'),
 });
 const InterviewTurn = z.object({
@@ -144,7 +148,7 @@ function toSpec(draft) {
     if (p.field === 'owner_signals' && p.signal_points) params.points = Object.fromEntries(Object.entries(p.signal_points).filter(([, v]) => v != null));
     return { field: p.field, weight: p.weight, params, why: p.why };
   });
-  return normalizeSpec({ uses: [{ use: 'sports_facility', role: 'primary' }], areas: ['WA:King'], requirements, preferences });
+  return normalizeSpec({ uses: [{ use: 'sports_facility', role: 'primary' }], areas: ['WA:King'], requirements, preferences, pending: draft.pending ?? [] });
 }
 
 export const _forTests = { get Draft() { return Draft; }, get InterviewTurn() { return InterviewTurn; }, toSpec: (d) => toSpec(d) };

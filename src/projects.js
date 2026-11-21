@@ -41,25 +41,52 @@ export async function createProject({ name, brief = '', spec }, user, source = '
 }
 
 // Saves a new spec version with a note on why it changed. Name and brief update without a new version.
-export async function updateProject(id, { name, brief, spec, changeNote = '' }, user, source = 'form') {
+export async function updateProject(id, { name, brief, spec, changeNote = '', baseVersion }, user, source = 'form') {
   const userId = user?.uid ?? null;
   const p = await getProject(id, user?.orgUid);
   if (!p) throw Object.assign(new Error('Project not found.'), { status: 404 });
-  if (name != null || brief != null) {
-    await run('UPDATE projects SET name = COALESCE(?, name), brief = COALESCE(?, brief), updated_at = now() WHERE id = ?',
-      [name != null ? String(name).slice(0, 120) : null, brief != null ? String(brief).slice(0, 20000) : null, p.id]);
-  }
-  if (spec != null) {
-    const { spec: s, errors } = normalizeSpec(spec);
-    if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
-    if (JSON.stringify(s) !== JSON.stringify(p.spec)) {
-      const version = p.spec_version + 1;
-      await run('UPDATE projects SET spec = ?, spec_version = ?, updated_at = now() WHERE id = ?', [JSON.stringify(s), version, p.id]);
-      await run('INSERT INTO project_spec_history (project_id, version, spec, change_note, source, changed_by) VALUES (?, ?, ?, ?, ?, ?)',
-        [p.id, version, JSON.stringify(s), String(changeNote).slice(0, 1000), source, userId ?? null]);
+  const normalized = spec != null ? normalizeSpec(spec) : null;
+  if (normalized?.errors.length) throw Object.assign(new Error(normalized.errors.join(' ')), { status: 400 });
+  // One transaction, row-locked: a save based on an older version than the one stored is refused (409),
+  // so two people editing at once never silently overwrite each other.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cur = (await client.query('SELECT spec, spec_version FROM projects WHERE id = $1 FOR UPDATE', [p.id])).rows[0];
+    if (baseVersion != null && Number(baseVersion) !== cur.spec_version) {
+      await client.query('ROLLBACK');
+      const latest = await getProject(p.id, user?.orgUid);
+      throw Object.assign(new Error('Someone changed this project since you opened it.'), { status: 409, project: { ...latest, history: await projectHistory(p.id) } });
     }
-  }
+    if (name != null || brief != null) {
+      await client.query('UPDATE projects SET name = COALESCE($1, name), brief = COALESCE($2, brief), updated_at = now() WHERE id = $3',
+        [name != null ? String(name).slice(0, 120) : null, brief != null ? String(brief).slice(0, 20000) : null, p.id]);
+    }
+    if (normalized && JSON.stringify(normalized.spec) !== JSON.stringify(typeof cur.spec === 'string' ? JSON.parse(cur.spec) : cur.spec)) {
+      const version = cur.spec_version + 1;
+      await client.query('UPDATE projects SET spec = $1, spec_version = $2, updated_at = now() WHERE id = $3', [JSON.stringify(normalized.spec), version, p.id]);
+      await client.query('INSERT INTO project_spec_history (project_id, version, spec, change_note, source, changed_by) VALUES ($1, $2, $3, $4, $5, $6)',
+        [p.id, version, JSON.stringify(normalized.spec), String(changeNote).slice(0, 1000), source, userId]);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
   return getProject(p.id, user?.orgUid);
+}
+
+// How many sites a draft spec would show, without scoring or fetching rows (the chip editor's "Show N sites").
+export async function previewCount(project, spec, { hidePassed } = {}) {
+  const { spec: s, errors } = normalizeSpec(spec);
+  if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
+  const k = compileSpec(s);
+  const where = ['c.excluded IS NULL', ...k.where];
+  if (hidePassed) where.push("COALESCE(r.status, 'new') <> 'rejected'");
+  const row = await one(`SELECT count(*)::int AS n FROM candidates c
+    LEFT JOIN project_properties r ON r.property_uid = c.property_uid AND r.project_id = ${Number(project.id)}
+    WHERE ${where.join(' AND ')}`, k.whereParams);
+  return row.n;
 }
 
 export async function projectHistory(id) {
@@ -130,6 +157,7 @@ export async function projectCandidates(project, filters = {}) {
   }
   if (filters.signal) add('c.signals ILIKE ?', `%${filters.signal}%`);
   if (filters.status) add("COALESCE(r.status, 'new') = ?", filters.status);
+  if (filters.hidePassed === 'true') add("COALESCE(r.status, 'new') <> 'rejected'");
   if (filters.saved === 'true') add('COALESCE(r.saved, false)');
   if (filters.pins) add('c.pin = ANY(?)', String(filters.pins).split(',').slice(0, 1000));
   if (filters.tag) add('c.tags LIKE ?', `%"${String(filters.tag).replace(/[^a-z-]/g, '')}"%`);
