@@ -8,7 +8,9 @@ Small local app for testing a land screen on one county (King, WA) with the Mire
 2. `cp .env.example .env`. `MAX_SPEND_USD` caps total spend (default $2).
 3. `npm install`, then `npm run dev`, then open http://localhost:4310.
 
-Needs Node 22.13+ (uses the built-in `node:sqlite`). Data lives in `data/paydirt.db`.
+Needs Node 22.13+. Data lives in Neon Postgres. The live site (Vercel) uses the `production` branch. Locally, `.env.local` points `npm run dev` and `npm run sql` at the `dev` branch, so test clicks never touch live data. The `db:migrate` and `import:*` scripts read only `.env` and still target production.
+
+Look something up with `npm run sql -- "SELECT …"` (read-only).
 
 ## Using it
 
