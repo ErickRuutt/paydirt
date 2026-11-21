@@ -92,7 +92,7 @@ map.on('load', () => {
     });
     map.on('click', layer, (e) => select(e.features[0].id, false));
   }
-  loadParcels(true);
+  loadParcels(false); // no auto-zoom on load: Candidates is the main view
 });
 
 $('lySat').onchange = (e) => map.setLayoutProperty('satellite', 'visibility', e.target.checked ? 'visible' : 'none');
