@@ -89,3 +89,6 @@ textarea { width: 100%; min-height: 60px; resize: vertical; }
 .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 .btnRow { display: flex; gap: 8px; flex-wrap: wrap; }
 label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--fg); }
+
+.row > label, .row3 > label { min-width: 0; }
+.row input, .row3 input, .row select { width: 100%; min-width: 0; }
