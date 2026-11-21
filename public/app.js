@@ -45,14 +45,14 @@ map.on('load', () => {
   });
   const firstSymbol = map.getStyle().layers.find((l) => l.type === 'symbol')?.id;
   map.addLayer({ id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } }, firstSymbol);
-  map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'dem', paint: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': '#3b4a42' } }, firstSymbol);
+  map.addLayer({ id: 'hillshade', type: 'hillshade', source: 'dem', paint: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': '#3B2416' } }, firstSymbol);
 
   map.addSource('blockgroups', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({ id: 'bg-fill', type: 'fill', source: 'blockgroups', layout: { visibility: 'none' },
     paint: { 'fill-color': ['case', ['==', ['get', 'share200k'], null], 'rgba(0,0,0,0)',
-      ['interpolate', ['linear'], ['get', 'share200k'], 0, '#f1eef6', 0.25, '#9e9ac8', 0.5, '#3f007d']], 'fill-opacity': 0.55 } }, firstSymbol);
+      ['interpolate', ['linear'], ['get', 'share200k'], 0, '#F1E4BF', 0.25, '#B8902A', 0.5, '#5C3D20']], 'fill-opacity': 0.55 } }, firstSymbol);
   map.addLayer({ id: 'bg-line', type: 'line', source: 'blockgroups', layout: { visibility: 'none' },
-    paint: { 'line-color': '#6a51a3', 'line-width': 0.4, 'line-opacity': 0.5 } }, firstSymbol);
+    paint: { 'line-color': '#8A6A4A', 'line-width': 0.4, 'line-opacity': 0.5 } }, firstSymbol);
   map.on('click', 'bg-fill', (e) => {
     if (map.queryRenderedFeatures(e.point, { layers: ['parcel-fill', 'parcel-pt'] }).length) return;
     const p = e.features[0].properties;
@@ -64,12 +64,12 @@ map.on('load', () => {
 
   map.addSource('drive', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   // Mapbox returns the largest contour first; draw outer (30 min) lighter, inner (20 min) stronger.
-  const driveColor = ['case', ['<=', ['get', 'contour'], 20], '#1f5c45', '#3f7f9f'];
+  const driveColor = ['case', ['<=', ['get', 'contour'], 20], '#1F4D36', '#B8902A'];
   map.addLayer({ id: 'drive-fill', type: 'fill', source: 'drive', paint: { 'fill-color': driveColor, 'fill-opacity': 0.12 } });
   map.addLayer({ id: 'drive-line', type: 'line', source: 'drive', paint: { 'line-color': driveColor, 'line-width': 2, 'line-dasharray': [2, 1] } });
 
   map.addSource('parcels', { type: 'geojson', data, promoteId: 'parcelnumb' });
-  const color = ['match', ['get', 'screen'], 'pass', '#2e8b57', 'fail', '#b4492a', '#c99a1b'];
+  const color = ['match', ['get', 'screen'], 'pass', '#2E7A50', 'fail', '#A4452A', '#B8902A'];
   map.addLayer({ id: 'parcel-fill', type: 'fill', source: 'parcels', filter: ['==', ['geometry-type'], 'Polygon'],
     paint: { 'fill-color': color, 'fill-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 0.55, ['boolean', ['feature-state', 'hover'], false], 0.45, 0.3] } });
   map.addLayer({ id: 'parcel-line', type: 'line', source: 'parcels', filter: ['==', ['geometry-type'], 'Polygon'],
@@ -313,3 +313,17 @@ $('closeDetail').onclick = () => {
 };
 
 loadConfig().catch((e) => { $('searchMsg').className = 'msg err'; $('searchMsg').textContent = e.message; });
+
+// ---------- Theme: Auto follows the system; Light/Dark are saved per browser ----------
+(() => {
+  const btns = [...document.querySelectorAll('[data-theme-set]')];
+  const apply = (mode) => {
+    if (mode === 'light' || mode === 'dark') document.documentElement.dataset.theme = mode;
+    else delete document.documentElement.dataset.theme;
+    for (const b of btns) b.setAttribute('aria-pressed', String(b.dataset.themeSet === (mode || 'system')));
+    try { if (mode === 'light' || mode === 'dark') localStorage.setItem('paydirt.theme', mode); else localStorage.removeItem('paydirt.theme'); } catch { /* storage blocked */ }
+  };
+  let saved = null; try { saved = localStorage.getItem('paydirt.theme'); } catch { /* storage blocked */ }
+  apply(saved);
+  for (const b of btns) b.onclick = () => apply(b.dataset.themeSet);
+})();

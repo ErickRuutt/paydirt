@@ -39,7 +39,7 @@
       } else {
         overlay.hidden = false;
         const box = document.getElementById('signinBox');
-        if (!box.dataset.mounted) { clerk.mountSignIn(box); box.dataset.mounted = '1'; }
+        if (!box.dataset.mounted) { clerk.mountSignIn(box, { appearance: { variables: { colorPrimary: '#1F4D36', fontFamily: 'Inter, sans-serif', borderRadius: '4px' } } }); box.dataset.mounted = '1'; }
       }
     };
     clerk.addListener(show);

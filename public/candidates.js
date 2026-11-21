@@ -8,7 +8,7 @@
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } } };
   const VERDICT_LABEL = { permitted: 'Permitted', conditional: 'Conditional use', prohibited: 'Not allowed', unknown: 'Unknown' };
   const VERDICT_PILL = { permitted: 'pass', conditional: 'review', prohibited: 'fail', unknown: 'unknown' };
-  const scoreColor = (s) => (s >= 75 ? '#1f5c45' : s >= 60 ? '#2e8b57' : s >= 45 ? '#c99a1b' : '#a59f8f');
+  const scoreClass = (s) => (s >= 75 ? 's4' : s >= 60 ? 's3' : s >= 45 ? 's2' : 's1'); // brand score ramp (styles.css)
   const where = (p) => p.city ? titleCase(p.city) : `Unincorporated${p.postal_city ? ' · ' + titleCase(p.postal_city) : ''}`;
   const titleCase = (s) => String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -28,12 +28,12 @@
     const before = map.getLayer('parcel-fill') ? 'parcel-fill' : undefined;
     map.addSource('cand', { type: 'geojson', data: cand, promoteId: 'pin' });
     map.addSource('cand-sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    map.addLayer({ id: 'cand-sel-fill', type: 'fill', source: 'cand-sel', paint: { 'fill-color': '#1f5c45', 'fill-opacity': 0.25 } }, before);
-    map.addLayer({ id: 'cand-sel-line', type: 'line', source: 'cand-sel', paint: { 'line-color': '#1f5c45', 'line-width': 3 } }, before);
+    map.addLayer({ id: 'cand-sel-fill', type: 'fill', source: 'cand-sel', paint: { 'fill-color': '#1F4D36', 'fill-opacity': 0.25 } }, before);
+    map.addLayer({ id: 'cand-sel-line', type: 'line', source: 'cand-sel', paint: { 'line-color': '#D4AF4E', 'line-width': 3 } }, before);
     map.addLayer({
       id: 'cand-pt', type: 'circle', source: 'cand',
       paint: {
-        'circle-color': ['step', ['get', 'score'], '#a59f8f', 45, '#c99a1b', 60, '#2e8b57', 75, '#1f5c45'],
+        'circle-color': ['step', ['get', 'score'], '#B9A88E', 45, '#B8902A', 60, '#2E7A50', 75, '#1F4D36'],
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, ['case', ['boolean', ['feature-state', 'sel'], false], 7, 3], 13, ['case', ['boolean', ['feature-state', 'sel'], false], 11, 7]],
         'circle-stroke-color': '#fff', 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 8, 0.5, 13, 1.5],
         'circle-opacity': 0.9,
@@ -73,7 +73,7 @@
     $('cList').innerHTML = shown.map(({ properties: p }) => `
       <li data-pin="${esc(p.pin)}" class="${p.pin === candSel ? 'sel' : ''}">
         <span class="t">${esc(p.address || 'No site address')} <span class="muted" style="font-weight:400">· ${esc(where(p))}</span></span>
-        <span class="score" style="background:${scoreColor(p.score)}">${p.score}</span>
+        <span class="score ${scoreClass(p.score)}">${p.score}</span>
         <span class="m">${fmt.ac(p.acres)} · ${esc(p.zoning || 'no zone')} (${esc(VERDICT_LABEL[p.sports_verdict] ?? p.sports_verdict)})${p.years_held != null ? ` · held ${Math.floor(p.years_held)}y` : ''}${p.hh200k_10mi != null ? ` · ${Math.round(p.hh200k_10mi / 1000)}k $200k+ hh in 10 mi` : ''}${p.status !== 'new' ? ` · <b>${esc(p.status)}</b>` : ''}</span>
         ${p.signals.slice(0, 3).map((s) => `<span class="chip">${esc(s)}</span>`).join('')}
       </li>`).join('') || '<li class="muted">No candidates match these filters.</li>';
@@ -246,7 +246,7 @@
     const landPerAc = c.land_value && c.acres ? c.land_value / c.acres : null;
     $('detailBody').innerHTML = `
       <h3>${esc(c.address || 'No site address')}</h3>
-      <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} <span class="score" style="background:${scoreColor(c.score)}">${c.score}</span></p>
+      <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} <span class="score ${scoreClass(c.score)}">${c.score}</span></p>
       ${c.hiddenBecause.length ? `<p class="warn">Not in this project's results: ${c.hiddenBecause.map(esc).join('; ')}</p>` : ''}
       <section><h2>Score for ${esc(project.name)}</h2><div class="bars">${c.subscores.map((s) => bar(`${esc(s.label)} <span class="muted">${Math.round(s.share * 100)}%</span>`, s.value)).join('')}</div>
         <p class="muted" style="font-size:12px;margin:0">Each line is 0–100; the percentage is its weight in this project's score (version ${project.spec_version}).</p></section>

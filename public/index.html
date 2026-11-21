@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Paydirt</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="styles.css">
+<script>/* Apply the saved theme before first paint to avoid a flash. */ try { const t = localStorage.getItem('paydirt.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* storage blocked */ }</script>
 </head>
 <body>
 <aside id="panel">
   <header>
-    <div class="brand"><h1>Paydirt</h1><div id="userButton"></div></div>
+    <div class="brand"><h1>Pay<span>dirt</span></h1><div class="brand-right"><div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div><div id="userButton"></div></div></div>
     <p class="sub"><span id="county">King County, WA</span> · <span id="spend">$0.00 spent</span></p>
     <p id="keyWarn" class="warn" hidden>No Mireye key loaded. Run <code>mireye-mcp connect</code> or set <code>MIREYE_API_KEY</code> in <code>.env</code>.</p>
   </header>
@@ -118,10 +122,10 @@
   <span><i class="sw pass"></i>Pass</span>
   <span><i class="sw review"></i>Review</span>
   <span><i class="sw fail"></i>Fail</span>
-  <span id="driveLegend" hidden><i class="sw" style="background:#1f5c45"></i>20 min drive <i class="sw" style="background:#3f7f9f;margin-left:8px"></i>30 min</span>
+  <span id="driveLegend" hidden><i class="sw" style="background:#1F4D36"></i>20 min drive <i class="sw" style="background:#B8902A;margin-left:8px"></i>30 min</span>
   <span id="candLegend"><i class="ramp score"></i>Candidate score: low → high</span>
-  <span id="cityLegend" hidden><i class="sw" style="background:#3f6fb5;opacity:.5"></i>Inside a city (city zoning) · no tint = unincorporated (county zoning)</span>
-  <span id="ugaLegend" hidden><i class="sw" style="background:none;border-top:2px dashed #b4492a;border-radius:0;height:0;vertical-align:3px"></i>Urban growth line · <i class="sw" style="background:#7a8f3a;opacity:.4"></i>rural side</span>
+  <span id="cityLegend" hidden><i class="sw" style="background:#5C3D20;opacity:.5"></i>Inside a city (city zoning) · no tint = unincorporated (county zoning)</span>
+  <span id="ugaLegend" hidden><i class="sw" style="background:none;border-top:2px dashed #A4452A;border-radius:0;height:0;vertical-align:3px"></i>Urban growth line · <i class="sw" style="background:#4C9A6E;opacity:.4"></i>rural side</span>
   <span id="affLegend" hidden><i class="ramp"></i>$200k+ share: 0% → 50%+</span>
   <span id="affMissing" hidden class="muted">Shapes only: add CENSUS_API_KEY for income</span>
 </div>
@@ -132,7 +136,7 @@
 </aside>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<div id="signin" hidden><div class="signinCard"><h1>Paydirt</h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
+<div id="signin" hidden><div class="signinCard"><h1>Pay<span style="color:var(--accent)">dirt</span></h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
 <script src="auth.js"></script>
 <script src="app.js"></script>
 <script src="candidates.js"></script>
