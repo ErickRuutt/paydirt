@@ -34,6 +34,28 @@ county) and old-vs-new zone names.
 - **Database growth:** a county is tens of MB; nationally that's tens of GB plus geometry, so a move
   to PostGIS with vector tiles (instead of shipping GeoJSON) is needed before many counties.
 
+## Data once, lenses many (how we avoid re-fetching and re-sell results)
+
+Searches should never re-pull the world. Split Paydirt into two layers:
+
+- **Data layer (bought once per area, shared by every user):** parcels, ownership history, zoning
+  verdicts, demographics, and every paid enrichment ever run (slope/wetland, drive time). Keyed by
+  parcel, timestamped, refreshed incrementally (only parcels whose source changed: new sales,
+  rezones, permits, listings). One user's paid enrichment becomes everyone's cached fact.
+- **Lens layer (free and instant to change):** a buyer profile (Field House = 13–40 ac, sports-club
+  zoning, $200k+ households in 20 min) is just a scoring function over the data layer. Changing
+  criteria re-scores locally — no API calls — so flexible search costs nothing.
+
+That is the resale model: the expensive part (data, enrichment, reading zoning) is paid once and
+amortized across every customer and every search in that area. Customers pay for access to an area
+and for *new* facts (refreshes, first-time enrichments), not for re-running queries.
+
+Implications for the build:
+- Move scoring weights and filters out of the import script into saved "profiles" scored at read
+  time (or materialized per profile), so a new buyer type doesn't need a rebuild.
+- Track freshness per parcel per source (`fetched_at`), and make refresh = "what changed since".
+- Meter only first-time fetches; cache hits are free to us and cheap (or free) to users.
+
 ## Monetization: consumption model (not during testing)
 
 - **Buy an area once → it unlocks** (like AllTrails regions): the free-data layers and scores for
