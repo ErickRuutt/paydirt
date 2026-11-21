@@ -122,7 +122,12 @@ export async function projectCandidates(project, filters = {}) {
   if (filters.minAcres) add('c.acres >= ?', Number(filters.minAcres));
   if (filters.maxAcres) add('c.acres <= ?', Number(filters.maxAcres));
   if (filters.verdict) add('c.sports_verdict = ANY(?)', String(filters.verdict).split(','));
-  if (filters.area) add("(COALESCE(c.city, '') ILIKE ? OR COALESCE(c.postal_city, '') ILIKE ?)", `%${filters.area}%`, `%${filters.area}%`);
+  // Search box: address, parcel number (dashes optional) or town.
+  if (filters.area) {
+    const q = `%${filters.area}%`, digits = String(filters.area).replace(/\D/g, '');
+    add(`(COALESCE(c.address, '') ILIKE ? OR COALESCE(c.city, '') ILIKE ? OR COALESCE(c.postal_city, '') ILIKE ?${digits.length >= 4 ? ' OR c.pin LIKE ?' : ''})`,
+      q, q, q, ...(digits.length >= 4 ? [`%${digits}%`] : []));
+  }
   if (filters.signal) add('c.signals ILIKE ?', `%${filters.signal}%`);
   if (filters.status) add("COALESCE(r.status, 'new') = ?", filters.status);
   if (filters.saved === 'true') add('COALESCE(r.saved, false)');

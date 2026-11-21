@@ -47,6 +47,21 @@ async function sendToNotion(f) {
   return body.id;
 }
 
+// Copy anything that didn't reach Notion (e.g. the key was wrong at the time). Usage: npm run feedback:resend
+export async function resendPending() {
+  if (!hasNotion()) throw new Error('NOTION_TOKEN and NOTION_FEEDBACK_DB are not set.');
+  const { all } = await import('./db.js');
+  const rows = await all('SELECT * FROM feedback WHERE notion_page_id IS NULL ORDER BY created_at');
+  let sent = 0;
+  for (const r of rows) {
+    try {
+      const id = await sendToNotion({ uid: r.feedback_uid, name: r.name, email: r.email, kind: r.kind, message: r.message, page: r.page, createdAt: new Date(r.created_at).toISOString() });
+      await run('UPDATE feedback SET notion_page_id = ?, notion_error = NULL WHERE feedback_uid = ?', [id, r.feedback_uid]); sent++;
+    } catch (e) { await run('UPDATE feedback SET notion_error = ? WHERE feedback_uid = ?', [e.message.slice(0, 500), r.feedback_uid]); }
+  }
+  return { pending: rows.length, sent };
+}
+
 export async function logFeedback(user, clerkUserId, { message, kind, page } = {}) {
   message = String(message ?? '').trim();
   if (!message) throw httpError(400, 'Write something first.');

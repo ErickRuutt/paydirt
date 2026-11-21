@@ -59,27 +59,6 @@
         </form>
       </details>
     </div>
-    <details class="refine"><summary>Refine results</summary>
-    <form id="candForm">
-      <p class="muted" style="margin:0;font-size:12px">Narrows this list and the map. It doesn't change the project.</p>
-      <div class="row">
-        <label>Min acres <input id="cMinAc" type="number" min="0" step="1" value="13"></label>
-        <label>Max acres <input id="cMaxAc" type="number" min="0" step="1" value="40"></label>
-      </div>
-      <div class="row">
-        <label>Zoning allows the use
-          <select id="cVerdict"><option value="permitted,conditional,unknown">Allowed or unknown</option><option value="permitted,conditional">Allowed (county code)</option><option value="permitted">Permitted outright</option><option value="unknown">Inside a city (unread)</option></select></label>
-        <label>Only matches above <input id="cMinScore" type="number" min="0" max="100" step="5" value="0"></label>
-      </div>
-      <div class="row">
-        <label>Town or area <input id="cArea" type="text" placeholder="e.g. Redmond, Duvall"></label>
-        <label>Likely to sell
-          <select id="cSignal"><option value="">Any</option><option value="held">Held 20+ years</option><option value="inherit">Inherited</option><option value="family or trust">Family or trust transfer</option><option value="no market sale">No market sale on record</option><option value="out of state">Owner out of state</option><option value="mostly land">Little or no building</option></select></label>
-      </div>
-      <label>What's on the site <select id="cSite"><option value="">Anything</option><option value="vacant-land">Vacant land only</option><option value="-operating-business">Hide operating businesses</option><option value="closing-tenant">Closing or bankrupt tenant</option><option value="possible-empty-building">Possible empty building</option><option value="leased-to-business">Leased to a business</option><option value="anchor-tenant">Major anchor tenant</option></select></label>
-      <label>Your status <select id="cStatus"><option value="">Any</option><option value="saved">Saved</option><option value="shortlist">Shortlist</option><option value="contacted">Contacted</option><option value="rejected">Rejected</option></select></label>
-    </form>
-    </details>
     <section>
       <div class="listHead"><h2>Best matches <span id="cCount" class="muted"></span></h2></div>
       <ul id="cList" class="list"></ul>
@@ -123,16 +102,32 @@
   </div>
 </aside>
 
+<form id="candForm" class="mapBar" role="search" aria-label="Search and filter parcels">
+  <input id="cArea" class="mapSearch" type="search" placeholder="Search address, parcel # or town" aria-label="Search address, parcel number or town">
+  <div class="acres" role="group" aria-label="Acres"><input id="cMinAc" type="number" min="0" step="1" value="13" aria-label="Minimum acres"><span>–</span><input id="cMaxAc" type="number" min="0" step="1" value="40" aria-label="Maximum acres"><span class="unit">ac</span></div>
+  <select id="cVerdict" aria-label="Zoning"><option value="permitted,conditional,unknown">Zoning: any</option><option value="permitted,conditional">Zoning: allowed</option><option value="permitted">Zoning: permitted</option><option value="unknown">Zoning: not read yet</option></select>
+  <select id="cSite" aria-label="What's on the site"><option value="">On site: anything</option><option value="vacant-land">Vacant land only</option><option value="-operating-business">Hide operating businesses</option><option value="closing-tenant">Closing or bankrupt tenant</option><option value="possible-empty-building">Possible empty building</option><option value="leased-to-business">Leased to a business</option><option value="anchor-tenant">Major anchor tenant</option></select>
+  <details class="pop"><summary>More filters</summary>
+    <div class="popBody">
+      <label>Likely to sell <select id="cSignal"><option value="">Any</option><option value="held">Held 20+ years</option><option value="inherit">Inherited</option><option value="family or trust">Family or trust transfer</option><option value="no market sale">No market sale on record</option><option value="out of state">Owner out of state</option><option value="mostly land">Little or no building</option></select></label>
+      <label>Your status <select id="cStatus"><option value="">Any</option><option value="saved">Saved</option><option value="shortlist">Shortlist</option><option value="contacted">Contacted</option><option value="rejected">Rejected</option></select></label>
+      <label>Only matches above <input id="cMinScore" type="number" min="0" max="100" step="5" value="0"></label>
+      <p class="muted small">Filters narrow the list and map. They don't change the project.</p>
+    </div>
+  </details>
+  <details class="pop popRight"><summary>Layers</summary>
+    <div class="popBody" id="layers">
+      <label><input type="checkbox" id="lySat"> Satellite</label>
+      <label><input type="checkbox" id="lyHill" checked> Hillshade</label>
+      <label><input type="checkbox" id="ly3d"> 3D terrain</label>
+      <label><input type="checkbox" id="lyAff"> $200k+ households</label>
+      <label><input type="checkbox" id="lyCity"> City limits</label>
+      <label><input type="checkbox" id="lyUga"> Urban growth line</label>
+    </div>
+  </details>
+</form>
 <main id="map"></main>
 
-<div id="layers" class="mapctl">
-  <label><input type="checkbox" id="lySat"> Satellite</label>
-  <label><input type="checkbox" id="lyHill" checked> Hillshade</label>
-  <label><input type="checkbox" id="ly3d"> 3D terrain</label>
-  <label><input type="checkbox" id="lyAff"> $200k+ households</label>
-  <label><input type="checkbox" id="lyCity"> City limits</label>
-  <label><input type="checkbox" id="lyUga"> Urban growth line</label>
-</div>
 
 <div id="legend" class="mapctl">
   <span><i class="sw pass"></i>Pass</span>
