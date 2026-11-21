@@ -61,7 +61,14 @@
     map.on('click', 'cand-pt', (e) => selectCandidate(e.features[0].properties.pin, false));
     map.on('mouseenter', 'cand-pt', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'cand-pt', () => { map.getCanvas().style.cursor = ''; });
-    loadProjects().then(loadCandidates).catch(showErr);
+    const url = new URLSearchParams(location.search);
+    loadProjects(url.get('project') ? Number(url.get('project')) : undefined).then(loadCandidates).then(() => {
+      if (url.get('pin')) selectCandidate(url.get('pin'), true);
+      const start = url.get('new');
+      if (start === 'brief') $('bBrief').click();
+      else if (start === 'interview') $('bInterview').click();
+      else if (start === 'form') { $('projEdit').open = true; $('jName').value = 'New project'; $('jName').focus(); }
+    }).catch(showErr);
   });
 
   // ---------- Data ----------
@@ -71,7 +78,7 @@
     const set = (k, v) => { if (v !== '' && v != null) q.set(k, v); };
     set('minAcres', $('cMinAc').value); set('maxAcres', $('cMaxAc').value);
     set('verdict', $('cVerdict').value); set('minScore', +$('cMinScore').value || '');
-    set('area', $('cArea').value.trim()); set('signal', $('cSignal').value); set('status', $('cStatus').value);
+    set('area', $('cArea').value.trim()); set('signal', $('cSignal').value); if ($('cStatus').value === 'saved') set('saved', 'true'); else set('status', $('cStatus').value);
     const site = $('cSite').value; if (site.startsWith('-')) set('notTag', site.slice(1)); else set('tag', site);
     const key = q.toString();
     pending = key;
@@ -98,10 +105,33 @@
           <span class="m">${fmt.ac(p.acres)} · ${esc(p.zoning || 'No zone')} · ${esc(where(p))}</span>
           <span class="facts">${rowFacts(p)}</span>
         </div>
+        <button type="button" class="rowStar" data-star="${esc(p.pin)}" aria-pressed="${p.saved ? 'true' : 'false'}" title="${p.saved ? 'Saved to this project' : 'Save to this project'}" aria-label="${p.saved ? 'Unsave' : 'Save'} ${esc(siteTitle(p))}">${p.saved ? '★' : '☆'}</button>
       </li>`).join('') || '<li class="muted">No candidates match these filters.</li>';
     window.paydirtTaper.apply($('cList'));
   }
-  $('cList').onclick = (e) => { const li = e.target.closest('li[data-pin]'); if (li) selectCandidate(li.dataset.pin, true); };
+  $('cList').onclick = (e) => {
+    const star = e.target.closest('[data-star]');
+    if (star) { e.stopPropagation(); toggleSave(star.dataset.star); return; }
+    const li = e.target.closest('li[data-pin]'); if (li) selectCandidate(li.dataset.pin, true);
+  };
+
+  // ---------- Saving (bookmarks) ----------
+  async function toggleSave(pin) {
+    const f = cand.features.find((x) => x.properties.pin === pin);
+    const next = !(f?.properties.saved ?? (candSel === pin && $('saveDetail').getAttribute('aria-pressed') === 'true'));
+    try {
+      const r = await api(`/api/projects/${project.id}/saved/${encodeURIComponent(pin)}`, { method: 'PUT', body: { saved: next } });
+      if (f) f.properties.saved = r.saved;
+      renderCandList();
+      if (candSel === pin) paintSaveButton(r.saved);
+    } catch (e) { showErr(e); }
+  }
+  function paintSaveButton(saved) {
+    const b = $('saveDetail'); b.hidden = false;
+    b.setAttribute('aria-pressed', String(saved)); b.textContent = saved ? '★ Saved' : '☆ Save';
+    b.title = saved ? 'Saved to this project. Click to remove.' : 'Save to this project';
+  }
+  $('saveDetail').onclick = () => { if (candSel) toggleSave(candSel); };
 
   // ---------- Projects ----------
   async function loadProjects(selectId) {
@@ -243,6 +273,7 @@
     window.clearCandidate();
     // Leave any searched-parcel selection (app.js state).
     if (selectedId) { map.setFeatureState({ source: 'parcels', id: selectedId }, { selected: false }); selectedId = null; }
+    $('saveDetail').hidden = true;
     candSel = pin; detailFor = pin;
     map.setFeatureState({ source: 'cand', id: pin }, { sel: true });
     renderCandList();
@@ -304,6 +335,7 @@
 
     window.paydirtTaper.apply($('detailBody'));
     $('detailBarTitle').textContent = `${siteTitle(c)} · ${c.score}`;
+    paintSaveButton(Boolean(c.saved));
     if (c.enrichment) showKeyFields(c.enrichment.fields, c.keyFields, c.enrichment.created_at);
     $('cEnrichBtn').onclick = async () => {
       $('cEnrichBtn').disabled = true; $('cEnrichMsg').className = 'msg'; $('cEnrichMsg').textContent = 'Checking…';

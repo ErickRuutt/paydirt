@@ -225,3 +225,63 @@ ALTER TABLE candidates ADD COLUMN IF NOT EXISTS tags TEXT;          -- JSON arra
 ALTER TABLE candidates ADD COLUMN IF NOT EXISTS businesses TEXT;    -- JSON [{label, kind, status, note}] from OpenStreetMap
 ALTER TABLE candidates ADD COLUMN IF NOT EXISTS owner_type TEXT;    -- individual / trust / llc / company / government
 ALTER TABLE candidates ADD COLUMN IF NOT EXISTS mail_attn TEXT;     -- attention line on the tax bill
+
+-- Added Nov 21, 2026: platform identity (docs/projects-spec.md). Two layers of property IDs:
+--   properties.property_uid  — the parcel itself, assigned once when it enters the master data; never changes.
+--   project_properties.pp_uid — that property inside one organization's project (saved flag, status, notes).
+-- Counts across organizations may only ever be reported as totals, never as who saved what.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TABLE IF NOT EXISTS orgs (
+  org_uid TEXT PRIMARY KEY,                 -- org_…
+  name TEXT NOT NULL,
+  clerk_org_id TEXT UNIQUE,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS users (
+  user_uid TEXT PRIMARY KEY,                -- usr_…
+  clerk_user_id TEXT UNIQUE NOT NULL,
+  org_uid TEXT REFERENCES orgs(org_uid),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  last_seen_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS properties (
+  property_uid TEXT PRIMARY KEY,            -- prop_…
+  source TEXT NOT NULL,                     -- e.g. kc_assessor
+  source_id TEXT NOT NULL,                  -- e.g. King County parcel number
+  county_fips TEXT,
+  first_seen_at TIMESTAMPTZ DEFAULT now(),
+  last_seen_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (source, source_id)
+);
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS property_uid TEXT;
+CREATE INDEX IF NOT EXISTS candidates_property_uid ON candidates (property_uid);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_uid TEXT UNIQUE;    -- prj_…
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS org_uid TEXT REFERENCES orgs(org_uid);
+CREATE TABLE IF NOT EXISTS project_properties (
+  pp_uid TEXT PRIMARY KEY,                  -- pp_…
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  property_uid TEXT NOT NULL REFERENCES properties(property_uid),
+  org_uid TEXT REFERENCES orgs(org_uid),
+  saved BOOLEAN NOT NULL DEFAULT false,
+  status TEXT NOT NULL DEFAULT 'new',       -- new / shortlist / contacted / rejected
+  notes TEXT DEFAULT '',
+  added_by TEXT REFERENCES users(user_uid),
+  saved_at TIMESTAMPTZ,
+  updated_by TEXT REFERENCES users(user_uid),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (project_id, property_uid)
+);
+CREATE INDEX IF NOT EXISTS project_properties_org_saved ON project_properties (org_uid) WHERE saved;
+CREATE TABLE IF NOT EXISTS events (
+  event_uid TEXT PRIMARY KEY,               -- evt_…
+  type TEXT NOT NULL,                       -- property.saved / property.unsaved / property.status_changed / property.viewed
+  property_uid TEXT,
+  pp_uid TEXT,
+  project_id INTEGER,
+  org_uid TEXT,
+  user_uid TEXT,
+  data TEXT,                                -- JSON details
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS events_property ON events (property_uid, type);

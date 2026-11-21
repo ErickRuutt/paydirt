@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Paydirt icon, simple">
+  <defs><clipPath id="c"><rect width="512" height="512" rx="104"/></clipPath></defs>
+  <g clip-path="url(#c)">
+    <rect width="512" height="512" fill="#3B2416"/>
+    <path d="M-40 300 C 60 250 120 330 210 300 S 330 210 420 250 S 520 330 560 300 L 560 560 L -40 560 Z" fill="#5C3D20"/>
+    <path d="M-40 150 C 90 110 150 250 256 220 C 330 199 360 120 420 170 C 470 212 460 360 560 350" fill="none" stroke="#4C9A6E" stroke-width="96" stroke-linecap="round"/>
+    <path d="M-40 150 C 90 110 150 250 256 220 C 330 199 360 120 420 170 C 470 212 460 360 560 350" fill="none" stroke="#F3EDE2" stroke-width="44" stroke-linecap="round"/>
+    <ellipse cx="160" cy="400" rx="34" ry="27" fill="#D4AF4E"/>
+    <ellipse cx="214" cy="430" rx="16" ry="13" fill="#D4AF4E"/>
+    <ellipse cx="120" cy="448" rx="11" ry="9" fill="#B8902A"/>
+    <ellipse cx="350" cy="380" rx="20" ry="16" fill="#D4AF4E"/>
+  </g>
+</svg>

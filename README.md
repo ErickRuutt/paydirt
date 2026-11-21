@@ -77,3 +77,20 @@ mailing address, and businesses mapped in OpenStreetMap inside the parcel. Ancho
 Projects decide what the tags mean: `tags_exclude` / `tags_include` requirements, and the `business_on_site` preference,
 which ranks operating sites lower and caps their score (Field House v2: capped at 40; closing tenants and possible empty
 buildings keep partial credit).
+
+## Pages
+
+- `/` (index.html): home. Your organization's projects and every property saved across them.
+- `/project.html?id=N`: one project's saved properties, with status and notes.
+- `/map.html?project=N[&pin=PIN][&new=brief|interview|form]`: the map and research tool. ☆ saves a parcel to the project.
+
+## Identity and IDs (groundwork for multi-company use)
+
+- `properties.property_uid` (`prop_…`): the parcel itself, assigned once when it enters the master data
+  (keyed by source + source id, e.g. `kc_assessor` + parcel number). Rebuilds keep it.
+- `project_properties.pp_uid` (`pp_…`): that property inside one organization's project: saved flag, status, notes,
+  who saved it and when. Replaces `project_reviews` (kept, empty, for now).
+- `orgs.org_uid` (`org_…`), `users.user_uid` (`usr_…`, mapped from Clerk on first request), `projects.project_uid` (`prj_…`).
+  Everything is scoped to the user's organization; everyone joins the "Paydirt" org for now.
+- `events` (`evt_…`): append-only log of property.saved / unsaved / status_changed. Nothing reads it yet. Reports
+  across organizations must only ever use totals, never who saved what.

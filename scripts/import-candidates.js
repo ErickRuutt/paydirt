@@ -15,6 +15,7 @@ import { pool } from '../src/db.js';
 import { sportsClubVerdict } from '../src/zoning-kc.js';
 import { classifyBusiness, ownerType, CORPORATE_MAIL, CORPORATE_ATTN } from '../src/tenants.js';
 import { pointInGeometry } from '../src/isochrone.js';
+import { syncProperties } from './lib/properties.js';
 
 const RAW = new URL('../data/raw/', import.meta.url).pathname;
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
@@ -180,6 +181,9 @@ const client = await connect();
 await client.query('BEGIN');
 await client.query('DELETE FROM candidates');
 await insertMany(client, 'candidates', COLS, rows);
+// Every parcel keeps a permanent property_uid across rebuilds (the master registry).
+await syncProperties(client, { source: 'kc_assessor', countyFips: '53033', sourceIds: rows.map((r) => r[0]) });
+await client.query("UPDATE candidates c SET property_uid = p.property_uid FROM properties p WHERE p.source = 'kc_assessor' AND p.source_id = c.pin");
 await setMeta(client, 'candidates', rows.length, 'King County GIS parcels 5+ acres + assessor accounts + sales + ACS');
 await client.query('COMMIT');
 await client.query('ANALYZE candidates');

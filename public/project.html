@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project · Paydirt</title>
+<link rel="icon" href="brand/simple.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script>try { const t = localStorage.getItem('paydirt.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* storage blocked */ }</script>
+</head>
+<body class="page">
+<header class="topbar">
+  <div class="topbar-in">
+    <a href="index.html" class="wordmark">Pay<span>dirt</span></a>
+    <a href="index.html" class="back">← Projects</a>
+    <div class="brand-right">
+      <div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
+      <div id="userButton"></div>
+    </div>
+  </div>
+</header>
+
+<main class="page-in">
+  <section class="block">
+    <div class="block-head"><h1 id="pName">Project</h1><a id="openMap" class="btn" href="map.html">Open map</a></div>
+    <p id="pBrief" class="muted" data-taper="3" style="max-width:70ch"></p>
+    <p id="pMeta" class="lblish"></p>
+  </section>
+  <section class="block">
+    <div class="block-head"><h2>Saved properties</h2><span id="savedCount" class="lblish"></span></div>
+    <div id="saved"><p class="muted">Loading…</p></div>
+    <p id="msg" class="msg"></p>
+  </section>
+</main>
+
+<div id="signin" hidden><div class="signinCard"><h1>Pay<span style="color:var(--accent)">dirt</span></h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
+<script src="auth.js"></script>
+<script src="theme.js"></script>
+<script src="score.js"></script>
+<script src="taper.js"></script>
+<script src="pages.js"></script>
+<script>
+(async () => {
+  const { $, esc, api, where, siteTitle, ac, date, labels, STATUSES, STATUS_TEXT } = pd;
+  const id = Number(new URLSearchParams(location.search).get('id'));
+  async function load() {
+    const r = await api(`/api/projects/${id}/saved`);
+    document.title = `${r.project.name} · Paydirt`;
+    $('pName').textContent = r.project.name;
+    $('pBrief').textContent = r.project.brief || '';
+    $('pMeta').textContent = `Version ${r.project.spec_version} · ${r.project.project_uid}`;
+    $('openMap').href = `map.html?project=${r.project.id}`;
+    $('savedCount').textContent = `${r.saved.length}`;
+    $('saved').innerHTML = r.saved.length ? `<div class="table-wrap"><table class="grid">
+      <thead><tr><th>Score</th><th>Property</th><th>Status</th><th>Notes</th><th>Saved</th><th></th></tr></thead>
+      <tbody>${r.saved.map((p) => `<tr data-pin="${esc(p.pin)}">
+        <td>${p.score != null ? paydirtScore.chip(p.score) : '<span class="muted small">Hidden</span>'}</td>
+        <td><b>${esc(siteTitle(p))}</b><div class="muted small">${ac(p.acres)} · ${esc(p.zoning || 'No zone')} · ${esc(where(p))}</div><div class="facts">${labels(p)}</div>
+          ${p.hiddenByCriteria ? '<div class="muted small">No longer matches this project’s requirements.</div>' : ''}</td>
+        <td><select data-status aria-label="Status">${STATUSES.map((s) => `<option value="${s}" ${p.status === s ? 'selected' : ''}>${STATUS_TEXT[s]}</option>`).join('')}</select></td>
+        <td><textarea data-notes rows="2" placeholder="Site visit, owner contact…">${esc(p.notes)}</textarea></td>
+        <td class="nowrap">${date(p.saved_at)}</td>
+        <td class="nowrap"><a href="map.html?project=${id}&pin=${encodeURIComponent(p.pin)}">Map</a> · <button type="button" class="linkBtn" data-unsave>Remove</button></td>
+      </tr>`).join('')}</tbody></table></div>`
+      : `<div class="empty"><b>Nothing saved to this project yet</b><p class="muted">Open the map and tap ☆ on a parcel.</p></div>`;
+    window.paydirtTaper?.apply(document);
+  }
+  const say = (t, err) => { $('msg').className = err ? 'msg err' : 'msg'; $('msg').textContent = t; };
+  $('saved').addEventListener('change', async (e) => {
+    const row = e.target.closest('tr[data-pin]'); if (!row || !e.target.matches('[data-status]')) return;
+    try { await api(`/api/projects/${id}/reviews/${encodeURIComponent(row.dataset.pin)}`, { method: 'PATCH', body: { status: e.target.value } }); say('Status saved.'); }
+    catch (err) { say(err.message, true); }
+  });
+  $('saved').addEventListener('focusout', async (e) => {
+    const row = e.target.closest('tr[data-pin]'); if (!row || !e.target.matches('[data-notes]') || e.target.value === e.target.defaultValue) return;
+    try { await api(`/api/projects/${id}/reviews/${encodeURIComponent(row.dataset.pin)}`, { method: 'PATCH', body: { notes: e.target.value } }); e.target.defaultValue = e.target.value; say('Notes saved.'); }
+    catch (err) { say(err.message, true); }
+  });
+  $('saved').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-unsave]'); if (!b) return;
+    const row = b.closest('tr[data-pin]');
+    try { await api(`/api/projects/${id}/saved/${encodeURIComponent(row.dataset.pin)}`, { method: 'PUT', body: { saved: false } }); say('Removed from saved. Its notes are kept if you save it again.'); await load(); }
+    catch (err) { say(err.message, true); }
+  });
+  try { await load(); } catch (e) { $('saved').innerHTML = `<p class="msg err">${esc(e.message)}</p>`; }
+})();
+</script>
+</body>
+</html>

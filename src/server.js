@@ -8,7 +8,8 @@ import { ownershipFor } from './ownership.js';
 import { reachFor, reachWithin, blockGroupsGeoJSON, hasDemographics } from './demographics.js';
 import { getIsochrones, contoursByMinutes, pointInGeometry, hasMapbox } from './isochrone.js';
 import { KEY_FIELDS } from './candidates.js';
-import { listProjects, getProject, createProject, updateProject, projectHistory, reviewParcel, projectCandidates, projectCandidate, REVIEW_STATUSES } from './projects.js';
+import { listProjects, getProject, createProject, updateProject, projectHistory, reviewParcel, setSaved, orgSaved, projectCandidates, projectCandidate, REVIEW_STATUSES } from './projects.js';
+import { ensureUser } from './identity.js';
 import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS, TAG_LABELS } from './spec.js';
 import { draftFromText, interviewTurn, hasClaude } from './compiler.js';
 
@@ -26,7 +27,8 @@ app.use('/api', clerkMiddleware(), (req, res, next) => {
   const { userId } = getAuth(req);
   if (!userId) return res.status(401).json({ error: 'Sign in required.' });
   req.userId = userId;
-  next();
+  // Paydirt's own identity (usr_…, org_…) for this Clerk sign-in; everything is scoped to the org.
+  ensureUser(userId).then((u) => { req.user = u; next(); }, next);
 });
 
 const parcelPoint = (id) => one('SELECT parcelnumb, lat, lng FROM parcels WHERE parcelnumb = ?', [id]);
@@ -61,46 +63,75 @@ app.get('/api/parcels/:id/profile', wrap(async (req, res) => {
 
 // ---------- Candidates: every 5+ acre parcel, scored from free county data ----------
 // ---------- Projects: one buyer's search (docs/projects-spec.md) ----------
-const projectOr404 = async (id) => {
-  const p = await getProject(id);
+const projectOr404 = async (id, req) => {
+  const p = await getProject(id, req.user.orgUid);
   if (!p) throw httpError(404, 'Project not found.');
   return p;
 };
 app.get('/api/projects', wrap(async (req, res) => res.json({
-  projects: await listProjects(),
+  projects: await listProjects(req.user.orgUid),
   catalog: { requirements: REQUIREMENT_FIELDS, preferences: PREFERENCE_FIELDS, signals: SIGNAL_LABELS, tags: TAG_LABELS },
 })));
 const SOURCES = new Set(['form', 'markdown', 'interview']);
 const sourceOf = (b) => (SOURCES.has(b?.source) ? b.source : 'form');
-app.post('/api/projects', wrap(async (req, res) => res.json(await createProject(req.body ?? {}, req.userId, sourceOf(req.body)))));
+app.post('/api/projects', wrap(async (req, res) => res.json(await createProject(req.body ?? {}, req.user, sourceOf(req.body)))));
 app.get('/api/projects/:id', wrap(async (req, res) => {
-  const p = await projectOr404(req.params.id);
+  const p = await projectOr404(req.params.id, req);
   res.json({ ...p, history: await projectHistory(p.id) });
 }));
-app.put('/api/projects/:id', wrap(async (req, res) => res.json(await updateProject(req.params.id, req.body ?? {}, req.userId, sourceOf(req.body)))));
+app.put('/api/projects/:id', wrap(async (req, res) => res.json(await updateProject(req.params.id, req.body ?? {}, req.user, sourceOf(req.body)))));
 
 // Drafts: Claude turns a brief or an interview into criteria. Nothing is saved until a person applies it.
 app.post('/api/drafts/from-text', wrap(async (req, res) => {
-  const current = req.body?.projectId ? (await projectOr404(req.body.projectId)).spec : null;
+  const current = req.body?.projectId ? (await projectOr404(req.body.projectId, req)).spec : null;
   res.json(await draftFromText({ text: req.body?.text, current }));
 }));
 app.post('/api/drafts/interview', wrap(async (req, res) => res.json(await interviewTurn({ messages: req.body?.messages }))));
 
-app.get('/api/projects/:id/candidates', wrap(async (req, res) => res.json(await projectCandidates(await projectOr404(req.params.id), req.query))));
+app.get('/api/projects/:id/candidates', wrap(async (req, res) => res.json(await projectCandidates(await projectOr404(req.params.id, req), req.query))));
 app.get('/api/projects/:id/candidates/:pin', wrap(async (req, res) => {
-  const p = await projectOr404(req.params.id);
+  const p = await projectOr404(req.params.id, req);
   const c = await projectCandidate(p, req.params.pin);
   if (!c) throw httpError(404, 'Parcel not found.');
   const enr = await one('SELECT raw_json, created_at FROM enrichments WHERE parcelnumb = ? ORDER BY id DESC LIMIT 1', [c.pin]);
   res.json({ ...c, keyFields: KEY_FIELDS, enrichment: enr ? { fields: JSON.parse(enr.raw_json).fields ?? {}, created_at: enr.created_at } : null });
 }));
 app.patch('/api/projects/:id/reviews/:pin', wrap(async (req, res) => {
-  const p = await projectOr404(req.params.id);
+  const p = await projectOr404(req.params.id, req);
   const { status, notes } = req.body ?? {};
   if (status != null && !REVIEW_STATUSES.includes(status)) throw httpError(400, `Status must be one of: ${REVIEW_STATUSES.join(', ')}`);
   if (!(await one('SELECT 1 FROM candidates WHERE pin = ?', [req.params.pin]))) throw httpError(404, 'Parcel not found.');
-  await reviewParcel(p.id, req.params.pin, { status, notes }, req.userId);
+  await reviewParcel(p, req.params.pin, { status, notes }, req.user);
   res.json({ ok: true });
+}));
+
+// Save (bookmark) a parcel to a project. Body: { saved: true|false }.
+app.put('/api/projects/:id/saved/:pin', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id, req);
+  const pp = await setSaved(p, req.params.pin, Boolean(req.body?.saved), req.user);
+  res.json({ ok: true, saved: pp.saved, pp_uid: pp.pp_uid, property_uid: pp.property_uid });
+}));
+
+// A project's saved properties, scored for that project, with status and notes.
+app.get('/api/projects/:id/saved', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id, req);
+  const rows = await all(`SELECT pp.pp_uid, pp.property_uid, pp.status, pp.notes, pp.saved_at, pp.updated_at, c.pin
+    FROM project_properties pp JOIN candidates c ON c.property_uid = pp.property_uid WHERE pp.project_id = ? AND pp.saved ORDER BY pp.saved_at DESC`, [p.id]);
+  const scored = rows.length ? await projectCandidates(p, { pins: rows.map((r) => r.pin).join(','), limit: 1000 }) : { features: [] };
+  const byPin = new Map(scored.features.map((f) => [f.properties.pin, f.properties]));
+  res.json({ project: { id: p.id, project_uid: p.project_uid, name: p.name, brief: p.brief, spec_version: p.spec_version },
+    saved: rows.map((r) => ({ ...r, ...(byPin.get(r.pin) ?? {}), status: r.status, hiddenByCriteria: !byPin.has(r.pin) })) });
+}));
+
+// ---------- Home: who you are, your projects, everything saved across them ----------
+app.get('/api/me', wrap(async (req, res) => {
+  const org = await one('SELECT org_uid, name FROM orgs WHERE org_uid = ?', [req.user.orgUid]);
+  res.json({ user_uid: req.user.uid, org });
+}));
+app.get('/api/home', wrap(async (req, res) => {
+  const [projects, saved, org] = await Promise.all([listProjects(req.user.orgUid), orgSaved(req.user.orgUid), one('SELECT org_uid, name FROM orgs WHERE org_uid = ?', [req.user.orgUid])]);
+  res.json({ org, projects: projects.map(({ spec, ...p }) => ({ ...p, criteria: spec.requirements.length + spec.preferences.length })),
+    saved: saved.map((r) => ({ ...r, tags: JSON.parse(r.tags ?? '[]') })) });
 }));
 
 // Parcel facts shared by every project (the data layer).

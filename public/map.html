@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map · Paydirt</title>
+<link rel="icon" href="brand/simple.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script>/* Apply the saved theme before first paint to avoid a flash. */ try { const t = localStorage.getItem('paydirt.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* storage blocked */ }</script>
+</head>
+<body class="map">
+<aside id="panel">
+  <header>
+    <div class="brand"><h1><a href="index.html" class="home" title="Back to your projects">Pay<span>dirt</span></a></h1><div class="brand-right"><div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div><div id="userButton"></div></div></div>
+    <p class="sub"><a href="index.html" class="back">← Projects</a> · <span id="county">King County, WA</span> · <span id="spend">$0.00 spent</span></p>
+    <p id="keyWarn" class="warn" hidden>No Mireye key loaded. Run <code>mireye-mcp connect</code> or set <code>MIREYE_API_KEY</code> in <code>.env</code>.</p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" id="tabBtnCand" aria-selected="true">Candidates</button>
+    <button type="button" role="tab" id="tabBtnSearch" aria-selected="false">Mireye search</button>
+  </nav>
+
+  <div id="tabCand">
+    <div class="profileBar">
+      <label>Project <select id="cProject" aria-label="Project"></select></label>
+      <div class="btnRow"><button id="bBrief" type="button" class="secondary">New from a brief</button><button id="bInterview" type="button" class="secondary">Build by interview</button></div>
+      <details id="projEdit">
+        <summary>Project settings</summary>
+        <form id="projForm" novalidate>
+          <label>Name <input id="jName" type="text" maxlength="120"></label>
+          <label>Brief <textarea id="jBrief" rows="3" placeholder="Who it's for and what they need, in plain words."></textarea></label>
+          <h2 style="margin:6px 0 0">Requirements <span class="muted" style="text-transform:none;letter-spacing:0">must pass, or the parcel is hidden</span></h2>
+          <div id="jReqs" class="critList"></div>
+          <select id="jAddReq" aria-label="Add requirement"><option value="">+ Add requirement…</option></select>
+          <h2 style="margin:6px 0 0">Preferences <span class="muted" style="text-transform:none;letter-spacing:0">add points; weights are relative</span></h2>
+          <div id="jPrefs" class="critList"></div>
+          <select id="jAddPref" aria-label="Add preference"><option value="">+ Add preference…</option></select>
+          <label>What changed and why <input id="jNote" type="text" maxlength="300" placeholder="e.g. Dan wants flatter sites; raised slope weight"></label>
+          <div class="btnRow"><button id="jSave" type="submit">Save</button><button id="jSaveNew" type="button" class="secondary">Save as new project</button></div>
+          <p id="jMsg" class="msg"></p>
+          <details><summary class="muted" style="font-size:12px">Change history</summary><ol id="jHist" class="hist"></ol></details>
+        </form>
+      </details>
+    </div>
+    <form id="candForm">
+      <p class="muted" style="margin:0;font-size:12px">Every King County parcel of 5+ acres, from free county data, ranked by the project above. Changing a project's criteria re-ranks instantly; no data is re-fetched. These filters narrow the view without changing the project.</p>
+      <div class="row">
+        <label>Min acres <input id="cMinAc" type="number" min="0" step="1" value="13"></label>
+        <label>Max acres <input id="cMaxAc" type="number" min="0" step="1" value="40"></label>
+      </div>
+      <div class="row">
+        <label>Sports club zoning
+          <select id="cVerdict"><option value="permitted,conditional,unknown">Allowed or unknown</option><option value="permitted,conditional">Allowed (county code)</option><option value="permitted">Permitted outright</option><option value="unknown">Inside a city (unread)</option></select></label>
+        <label>Min score <input id="cMinScore" type="number" min="0" max="100" step="5" value="0"></label>
+      </div>
+      <div class="row">
+        <label>Area <input id="cArea" type="text" placeholder="e.g. Redmond, Duvall"></label>
+        <label>Owner signal
+          <select id="cSignal"><option value="">Any</option><option value="held">Held 20+ years</option><option value="inherit">Inherited</option><option value="family or trust">Family or trust transfer</option><option value="no market sale">No market sale on record</option><option value="out of state">Owner out of state</option><option value="mostly land">Little or no building</option></select></label>
+      </div>
+      <label>What's on the site <select id="cSite"><option value="">Anything</option><option value="vacant-land">Vacant land only</option><option value="-operating-business">Hide operating businesses</option><option value="closing-tenant">Closing or bankrupt tenant</option><option value="possible-empty-building">Possible empty building</option><option value="leased-to-business">Leased to a business</option><option value="anchor-tenant">Major anchor tenant</option></select></label>
+      <label>Review status <select id="cStatus"><option value="">Any</option><option value="saved">Saved</option><option value="shortlist">Shortlist</option><option value="contacted">Contacted</option><option value="rejected">Rejected</option></select></label>
+    </form>
+    <section>
+      <div class="listHead"><h2>Candidates <span id="cCount" class="muted"></span></h2></div>
+      <ul id="cList" class="list"></ul>
+    </section>
+  </div>
+
+  <div id="tabSearch" hidden>
+  <form id="searchForm">
+    <h2>Search</h2>
+    <div class="row">
+      <label>Min acres <input id="acresMin" type="number" step="1" min="1"></label>
+      <label>Max acres <input id="acresMax" type="number" step="1" min="1"></label>
+    </div>
+    <div class="row">
+      <label>Min developable ac <input id="minDev" type="number" step="1" min="0"></label>
+      <label>Max wetland share <input id="maxWet" type="number" step="0.05" min="0" max="1"></label>
+    </div>
+    <div class="row">
+      <label>City (optional) <input id="city" type="text" placeholder="e.g. WOODINVILLE"></label>
+      <label>Parcels <input id="limit" type="number" min="1" max="100" value="10"></label>
+    </div>
+    <button id="searchBtn" type="submit">Search · $0.20</button>
+    <button id="moreBtn" type="button" hidden>Next page · $0.20</button>
+    <p id="searchMsg" class="msg" role="status"></p>
+  </form>
+
+  <section>
+    <div class="listHead">
+      <h2>Parcels <span id="count" class="muted"></span></h2>
+      <select id="filter" aria-label="Filter parcels">
+        <option value="all">All</option>
+        <option value="pass">Pass</option>
+        <option value="review">Needs review</option>
+        <option value="fail">Fail</option>
+        <option value="shortlist">Shortlist</option>
+      </select>
+    </div>
+    <ul id="list"></ul>
+    <p id="empty" class="muted">No parcels stored yet. Run a small search to start.</p>
+  </section>
+  </div>
+</aside>
+
+<main id="map"></main>
+
+<div id="layers" class="mapctl">
+  <label><input type="checkbox" id="lySat"> Satellite</label>
+  <label><input type="checkbox" id="lyHill" checked> Hillshade</label>
+  <label><input type="checkbox" id="ly3d"> 3D terrain</label>
+  <label><input type="checkbox" id="lyAff"> $200k+ households</label>
+  <label><input type="checkbox" id="lyCity"> City limits</label>
+  <label><input type="checkbox" id="lyUga"> Urban growth line</label>
+</div>
+
+<div id="legend" class="mapctl">
+  <span><i class="sw pass"></i>Pass</span>
+  <span><i class="sw review"></i>Review</span>
+  <span><i class="sw fail"></i>Fail</span>
+  <span id="driveLegend" hidden><i class="sw" style="background:#1F4D36"></i>20 min drive <i class="sw" style="background:#B8902A;margin-left:8px"></i>30 min</span>
+  <span id="candLegend"><i class="ramp score"></i>Candidate score: low → high</span>
+  <span id="cityLegend" hidden><i class="sw" style="background:#5C3D20;opacity:.5"></i>Inside a city (city zoning) · no tint = unincorporated (county zoning)</span>
+  <span id="ugaLegend" hidden><i class="sw" style="background:none;border-top:2px dashed #A4452A;border-radius:0;height:0;vertical-align:3px"></i>Urban growth line · <i class="sw" style="background:#4C9A6E;opacity:.4"></i>rural side</span>
+  <span id="affLegend" hidden><i class="ramp"></i>$200k+ share: 0% → 50%+</span>
+  <span id="affMissing" hidden class="muted">Shapes only: add CENSUS_API_KEY for income</span>
+</div>
+
+<aside id="detail" hidden aria-label="Parcel details">
+  <div class="detailBar">
+    <span id="detailBarTitle" class="lblish">Parcel details</span>
+    <div class="detailBtns">
+      <button id="saveDetail" type="button" class="ghost star" aria-pressed="false" hidden>☆ Save</button>
+      <button id="minDetail" type="button" class="ghost" aria-expanded="true" title="Minimize (keeps your place)">Minimize</button>
+      <button id="closeDetail" type="button" class="ghost" title="Close (Esc)">Close <span aria-hidden="true">✕</span></button>
+    </div>
+  </div>
+  <div id="detailBody"></div>
+</aside>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<div id="signin" hidden><div class="signinCard"><h1>Pay<span style="color:var(--accent)">dirt</span></h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
+<script src="auth.js"></script>
+<script src="score.js"></script>
+<script src="taper.js"></script>
+<script src="theme.js"></script>
+<script src="app.js"></script>
+<script src="candidates.js"></script>
+<script src="overlays.js"></script>
+<script src="builder.js"></script>
+</body>
+</html>
