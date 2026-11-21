@@ -141,13 +141,13 @@ for (const f of gis) {
   else if (sports.verdict === 'prohibited') excluded = `zoning: ${sports.note}`;
   else if (p.KCA_ACRES > 80) excluded = 'over 80 acres';
 
-  rows.push([pin, p.ADDR_FULL?.trim() || null, city, postal, p.ZIP5 || null, p.KCA_ACRES, zone, sports.verdict, sports.note, use, p.PROPTYPE ?? null,
+  rows.push([pin, p.ADDR_FULL?.trim() || null, city, postal, p.ZIP5 || null, p.KCA_ACRES, zone, sports.verdict, sports.note, sports.source ?? null, use, p.PROPTYPE ?? null,
     land, impr, acct.taxStat || null, cu, acct.addr || null, acct.cityState || null, absentee, outOfState, lat, lng, JSON.stringify(f.geometry),
     yh ?? null, own.yearsSinceTransfer ?? null, JSON.stringify(signals), mkt.rich, mkt.share, mkt.kids,
     fit, ownerScore, market, score, excluded]);
 }
 
-const COLS = ['pin', 'address', 'city', 'postal_city', 'zip', 'acres', 'zoning', 'sports_verdict', 'sports_note', 'present_use', 'prop_type',
+const COLS = ['pin', 'address', 'city', 'postal_city', 'zip', 'acres', 'zoning', 'sports_verdict', 'sports_note', 'zoning_source', 'present_use', 'prop_type',
   'land_value', 'impr_value', 'tax_status', 'current_use', 'mail_address', 'mail_city_state', 'absentee', 'out_of_state', 'lat', 'lng', 'geometry_json',
   'years_held', 'years_since_transfer', 'signals', 'hh200k_10mi', 'share200k_10mi', 'kids_share_10mi',
   'fit_score', 'owner_score', 'market_score', 'score', 'excluded'];

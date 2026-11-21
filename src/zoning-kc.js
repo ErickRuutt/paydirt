@@ -9,6 +9,8 @@
 //      limited to sports clubs providing supervised instructional or athletic programs.
 //   6: urban area; max 2,500 sq ft; no amplified noise; 7am–10pm.
 //   7: urban area; no amplified noise; max 10,000 sq ft unless next to a public facility or nonprofit; 7am–10pm.
+import { cityVerdict } from './zoning-cities.js';
+
 export const KC_CODE_SOURCE = 'https://aqua.kingcounty.gov/council/clerk/code/24-30_Title_21A.pdf';
 
 const RULES = [
@@ -23,8 +25,8 @@ const RULES = [
 
 export function sportsClubVerdict(zone, city) {
   const z = String(zone ?? '').trim().toUpperCase();
-  if (city) return { verdict: 'unknown', note: `Inside ${city}: city zoning code applies and hasn't been read yet.` };
+  if (city) return cityVerdict(city, zone);
   if (!z) return { verdict: 'unknown', note: 'No zoning on record.' };
-  for (const r of RULES) if (r.re.test(z)) return { verdict: r.verdict, note: r.note };
-  return { verdict: 'unknown', note: `Zone ${z} not mapped yet.` };
+  for (const r of RULES) if (r.re.test(z)) return { verdict: r.verdict, note: r.note, source: KC_CODE_SOURCE };
+  return { verdict: 'unknown', note: `Zone ${z} not mapped yet.`, source: KC_CODE_SOURCE };
 }

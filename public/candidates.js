@@ -123,7 +123,7 @@
       <section><h2>Zoning for a sports club <span class="pill ${VERDICT_PILL[c.sports_verdict]}">${esc(VERDICT_LABEL[c.sports_verdict])}</span></h2>
         <dl><dt>Zone</dt><dd>${esc(c.zoning || '—')}</dd></dl>
         <p style="margin:0;font-size:13px">${esc(c.sports_note)}</p>
-        ${c.city ? '' : `<p class="muted" style="font-size:12px;margin:0">Source: <a href="${esc(c.zoningSource)}" target="_blank" rel="noopener">King County Code Title 21A</a> (updated Sep 9, 2026). Confirm with the county before relying on it.</p>`}</section>
+        ${c.zoning_source ? `<p class="muted" style="font-size:12px;margin:0">Source: <a href="${esc(c.zoning_source)}" target="_blank" rel="noopener">${c.city ? esc(where(c)) + ' use table' : 'King County Code Title 21A (updated Sep 9, 2026)'}</a>, read Nov 2026. Confirm with the ${c.city ? 'city' : 'county'} before relying on it.</p>` : ''}</section>
       <section><h2>Owner signals</h2>
         <div>${c.signals.map((s) => `<span class="chip">${esc(s)}</span>`).join('') || '<span class="muted">None found.</span>'}</div>
         <dl><dt>Tax bill mailed to</dt><dd>${esc(c.mail_city_state || '—')}</dd>

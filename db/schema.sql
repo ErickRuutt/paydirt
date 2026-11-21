@@ -160,3 +160,6 @@ CREATE TABLE IF NOT EXISTS candidate_reviews (
   updated_by TEXT,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Added Nov 21, 2026: where each zoning verdict came from (county or city code URL).
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS zoning_source TEXT;
