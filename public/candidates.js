@@ -4,7 +4,7 @@
 (() => {
   let cand = { type: 'FeatureCollection', features: [], total: 0 };
   let candSel = null;
-  let profiles = [], profile = null;
+  let projects = [], project = null, catalog = null, draft = null;
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } } };
   const VERDICT_LABEL = { permitted: 'Permitted', conditional: 'Conditional use', prohibited: 'Not allowed', unknown: 'Unknown' };
   const VERDICT_PILL = { permitted: 'pass', conditional: 'review', prohibited: 'fail', unknown: 'unknown' };
@@ -42,7 +42,7 @@
     map.on('click', 'cand-pt', (e) => selectCandidate(e.features[0].properties.pin, false));
     map.on('mouseenter', 'cand-pt', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'cand-pt', () => { map.getCanvas().style.cursor = ''; });
-    loadProfiles().then(loadCandidates).catch(showErr);
+    loadProjects().then(loadCandidates).catch(showErr);
   });
 
   // ---------- Data ----------
@@ -53,11 +53,10 @@
     set('minAcres', $('cMinAc').value); set('maxAcres', $('cMaxAc').value);
     set('verdict', $('cVerdict').value); set('minScore', +$('cMinScore').value || '');
     set('area', $('cArea').value.trim()); set('signal', $('cSignal').value); set('status', $('cStatus').value);
-    if (profile?.id) set('profile', profile.id);
     const key = q.toString();
     pending = key;
     $('cCount').textContent = '(loading…)';
-    const r = await api('/api/candidates?' + key);
+    const r = await api(`/api/projects/${project.id}/candidates?` + key);
     if (pending !== key) return; // a newer filter change won
     cand = r;
     map.getSource('cand')?.setData(cand);
@@ -81,56 +80,130 @@
   }
   $('cList').onclick = (e) => { const li = e.target.closest('li[data-pin]'); if (li) selectCandidate(li.dataset.pin, true); };
 
-  // ---------- Profiles ----------
-  const weightText = (w) => { const t = (w.fit + w.owner + w.market) || 1; return `${Math.round(w.fit / t * 100)}% fit, ${Math.round(w.owner / t * 100)}% owner, ${Math.round(w.market / t * 100)}% market`; };
-
-  async function loadProfiles(selectId) {
-    const r = await api('/api/profiles');
-    profiles = r.profiles;
-    const want = Number(selectId ?? store.get('paydirt.profile'));
-    profile = profiles.find((p) => p.id === want) ?? profiles[0] ?? { id: null, name: 'Default', config: r.defaults };
-    $('cProfile').innerHTML = profiles.map((p) => `<option value="${p.id}" ${p.id === profile.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-    applyProfile();
+  // ---------- Projects ----------
+  async function loadProjects(selectId) {
+    const r = await api('/api/projects');
+    projects = r.projects; catalog = r.catalog;
+    const want = Number(selectId ?? store.get('paydirt.project'));
+    project = projects.find((p) => p.id === want) ?? projects[0];
+    if (!project) throw new Error('No projects yet.');
+    $('cProject').innerHTML = projects.map((p) => `<option value="${p.id}" ${p.id === project.id ? 'selected' : ''}>${esc(p.name)}${p.shortlisted ? ` (${p.shortlisted} shortlisted)` : ''}</option>`).join('');
+    $('jAddReq').innerHTML = '<option value="">+ Add requirement…</option>' + Object.entries(catalog.requirements).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join('');
+    $('jAddPref').innerHTML = '<option value="">+ Add preference…</option>' + Object.entries(catalog.preferences).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join('');
+    applyProject();
   }
 
-  function applyProfile() {
-    const c = profile.config;
-    store.set('paydirt.profile', String(profile.id ?? ''));
-    $('cMinAc').value = c.acres.min; $('cMaxAc').value = c.acres.max;
-    $('pName').value = profile.name; $('pMinAc').value = c.acres.min; $('pMaxAc').value = c.acres.max;
-    $('pWFit').value = c.weights.fit; $('pWOwner').value = c.weights.owner; $('pWMarket').value = c.weights.market;
-    $('pTarget').value = c.market.target; $('pMaxHide').value = c.maxAcres; $('pHideZoning').checked = c.hideProhibitedZoning;
-    $('pMsg').textContent = '';
+  function applyProject() {
+    store.set('paydirt.project', String(project.id));
+    draft = structuredClone(project.spec);
+    const acres = draft.preferences.find((p) => p.field === 'acres')?.params;
+    if (acres) { $('cMinAc').value = acres.min; $('cMaxAc').value = acres.max; } else { $('cMinAc').value = ''; $('cMaxAc').value = ''; }
+    $('jName').value = project.name; $('jBrief').value = project.brief ?? ''; $('jNote').value = ''; $('jMsg').textContent = '';
+    renderCriteria();
+    loadHistory();
   }
 
-  $('cProfile').onchange = () => {
-    profile = profiles.find((p) => p.id === Number($('cProfile').value)) ?? profile;
-    applyProfile();
+  async function loadHistory() {
+    try {
+      const r = await api(`/api/projects/${project.id}`);
+      $('jHist').innerHTML = r.history.map((h) => `<li>v${h.version} · ${esc(new Date(h.created_at).toLocaleDateString())} · ${esc(h.source)}${h.change_note ? ` — ${esc(h.change_note)}` : ''}</li>`).join('');
+    } catch { /* history is optional */ }
+  }
+
+  $('cProject').onchange = () => {
+    project = projects.find((p) => p.id === Number($('cProject').value)) ?? project;
+    window.clearCandidate(); $('detail').hidden = true;
+    applyProject();
     loadCandidates().catch(showErr);
   };
 
-  function editedConfig() {
-    const c = structuredClone(profile.config);
-    c.acres = { min: +$('pMinAc').value, max: +$('pMaxAc').value };
-    c.weights = { fit: +$('pWFit').value, owner: +$('pWOwner').value, market: +$('pWMarket').value };
-    c.market = { ...c.market, target: +$('pTarget').value };
-    c.maxAcres = +$('pMaxHide').value;
-    c.hideProhibitedZoning = $('pHideZoning').checked;
-    return c;
+  const signalLabel = (k) => catalog.signals[k] ?? k;
+  const optLabel = (field, o) => (field === 'owner_signals' ? signalLabel(o) : o === 'city' ? 'Inside a city' : o === 'unincorporated' ? 'Unincorporated county' : o[0].toUpperCase() + o.slice(1));
+
+  function reqEditor(r, i) {
+    const d = catalog.requirements[r.field];
+    let body = '';
+    if (d.type === 'range') body = `<div class="row"><label>Min <input type="number" data-k="min" value="${r.value?.[0] ?? ''}"></label><label>Max <input type="number" data-k="max" value="${r.value?.[1] ?? ''}"></label></div>`;
+    else if (d.type === 'set') body = `<div class="opts">${d.options.map((o) => `<label><input type="checkbox" data-opt="${o}" ${(r.value ?? []).includes(o) ? 'checked' : ''}> ${esc(optLabel(r.field, o))}</label>`).join('')}</div>`;
+    else if (d.type === 'list') body = `<input type="text" data-k="list" value="${esc((r.value ?? []).join(', '))}" placeholder="Redmond, Sammamish, Duvall">`;
+    else if (d.type === 'min' || d.type === 'max') body = `<input type="number" data-k="num" value="${r.value ?? ''}" placeholder="${d.type === 'min' ? 'At least' : 'At most'}">`;
+    return `<div class="crit" data-kind="req" data-i="${i}"><div class="head">${esc(d.label)}<button type="button" data-remove title="Remove">×</button></div>${body}
+      <input type="text" class="why" data-k="why" value="${esc(r.why ?? '')}" placeholder="Why (optional)"></div>`;
   }
 
-  async function saveProfile(asNew) {
-    const name = $('pName').value.trim() || 'Untitled profile';
-    const body = { id: asNew ? null : profile.id, name: asNew && name === profile.name ? `${name} (copy)` : name, config: editedConfig() };
-    try {
-      const saved = await api('/api/profiles', { method: 'POST', body });
-      await loadProfiles(saved.id);
-      $('pMsg').className = 'msg'; $('pMsg').textContent = asNew ? 'Saved as a new profile.' : 'Saved. List re-ranked.';
-      await loadCandidates();
-    } catch (e) { $('pMsg').className = 'msg err'; $('pMsg').textContent = e.message; }
+  function prefEditor(p, i) {
+    const d = catalog.preferences[p.field];
+    const params = p.params ?? d.params;
+    let extra = '';
+    if (p.field === 'acres') extra = `<div class="row"><label>Target min <input type="number" data-p="min" value="${params.min}"></label><label>Target max <input type="number" data-p="max" value="${params.max}"></label></div>`;
+    if (p.field === 'hh200k_10mi' || p.field === 'land_value_per_acre') extra = `<label>${p.field === 'hh200k_10mi' ? 'Households for a full score' : 'Full score at or below ($/acre)'} <input type="number" data-p="target" value="${params.target}"></label>`;
+    if (p.field === 'owner_signals') extra = `<details><summary class="muted" style="font-size:12px">Points per signal</summary><div class="opts">${Object.entries(params.points).map(([k, v]) => `<label>${esc(signalLabel(k))} <input type="number" style="width:60px" data-pt="${k}" value="${v}"></label>`).join('')}</div></details>`;
+    return `<div class="crit" data-kind="pref" data-i="${i}"><div class="head">${esc(d.label)}<button type="button" data-remove title="Remove">×</button></div>
+      <label>Weight <input type="number" min="0" max="100" step="1" data-k="weight" value="${p.weight}"></label>${extra}
+      <input type="text" class="why" data-k="why" value="${esc(p.why ?? '')}" placeholder="Why (optional)"></div>`;
   }
-  $('profForm').onsubmit = (e) => { e.preventDefault(); saveProfile(false); };
-  $('pSaveNew').onclick = () => saveProfile(true);
+
+  function renderCriteria() {
+    $('jReqs').innerHTML = draft.requirements.map(reqEditor).join('') || '<p class="muted" style="margin:0;font-size:12px">None: every parcel is ranked.</p>';
+    const total = draft.preferences.reduce((a, p) => a + (Number(p.weight) || 0), 0) || 1;
+    $('jPrefs').innerHTML = draft.preferences.map((p, i) => prefEditor(p, i).replace('</div>\n      <label>Weight', `<span class="muted" style="font-weight:400">${Math.round((Number(p.weight) || 0) / total * 100)}%</span></div>\n      <label>Weight`)).join('');
+  }
+
+  // Read the editors back into the draft spec.
+  function readCriteria() {
+    for (const el of document.querySelectorAll('#jReqs .crit')) {
+      const r = draft.requirements[+el.dataset.i]; const d = catalog.requirements[r.field];
+      r.why = el.querySelector('[data-k=why]').value;
+      if (d.type === 'range') r.value = [el.querySelector('[data-k=min]').value, el.querySelector('[data-k=max]').value].map((v) => (v === '' ? null : +v));
+      else if (d.type === 'set') r.value = [...el.querySelectorAll('[data-opt]')].filter((c) => c.checked).map((c) => c.dataset.opt);
+      else if (d.type === 'list') r.value = el.querySelector('[data-k=list]').value.split(',').map((x) => x.trim()).filter(Boolean);
+      else if (d.type === 'min' || d.type === 'max') r.value = el.querySelector('[data-k=num]').value === '' ? null : +el.querySelector('[data-k=num]').value;
+      else r.value = true;
+    }
+    for (const el of document.querySelectorAll('#jPrefs .crit')) {
+      const p = draft.preferences[+el.dataset.i];
+      p.weight = +el.querySelector('[data-k=weight]').value || 0;
+      p.why = el.querySelector('[data-k=why]').value;
+      p.params = structuredClone(p.params ?? catalog.preferences[p.field].params);
+      for (const inp of el.querySelectorAll('[data-p]')) p.params[inp.dataset.p] = +inp.value;
+      for (const inp of el.querySelectorAll('[data-pt]')) p.params.points[inp.dataset.pt] = +inp.value;
+    }
+  }
+
+  $('projForm').addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-remove]'); if (!rm) return;
+    readCriteria();
+    const el = rm.closest('.crit');
+    (el.dataset.kind === 'req' ? draft.requirements : draft.preferences).splice(+el.dataset.i, 1);
+    renderCriteria();
+  });
+  $('jPrefs').addEventListener('change', () => { readCriteria(); renderCriteria(); });
+  $('jAddReq').onchange = () => {
+    const f = $('jAddReq').value; if (!f) return; readCriteria();
+    const d = catalog.requirements[f];
+    draft.requirements.push({ field: f, value: d.type === 'set' ? [...d.options] : d.type === 'range' ? [null, null] : d.type === 'bool' ? true : null, why: '' });
+    $('jAddReq').value = ''; renderCriteria();
+  };
+  $('jAddPref').onchange = () => {
+    const f = $('jAddPref').value; if (!f) return; readCriteria();
+    draft.preferences.push({ field: f, weight: 10, params: structuredClone(catalog.preferences[f].params), why: '' });
+    $('jAddPref').value = ''; renderCriteria();
+  };
+
+  async function saveProject(asNew) {
+    readCriteria();
+    const body = { name: $('jName').value.trim() || 'Untitled project', brief: $('jBrief').value, spec: draft, changeNote: $('jNote').value.trim() };
+    try {
+      const saved = asNew
+        ? await api('/api/projects', { method: 'POST', body: { ...body, name: body.name === project.name ? `${body.name} (copy)` : body.name } })
+        : await api(`/api/projects/${project.id}`, { method: 'PUT', body });
+      await loadProjects(saved.id);
+      $('jMsg').className = 'msg'; $('jMsg').textContent = asNew ? 'Created a new project.' : `Saved as version ${saved.spec_version}. List re-ranked.`;
+      await loadCandidates();
+    } catch (e) { $('jMsg').className = 'msg err'; $('jMsg').textContent = e.message; }
+  }
+  $('projForm').onsubmit = (e) => { e.preventDefault(); saveProject(false); };
+  $('jSaveNew').onclick = () => saveProject(true);
 
   // ---------- Detail ----------
   window.clearCandidate = () => {
@@ -150,7 +223,7 @@
     setDrive(null);
     $('detail').hidden = false;
     $('detailBody').innerHTML = '<p class="muted">Loading…</p>';
-    const c = await api(`/api/candidates/${encodeURIComponent(pin)}${profile?.id ? `?profile=${profile.id}` : ''}`);
+    const c = await api(`/api/projects/${project.id}/candidates/${encodeURIComponent(pin)}`);
     if (detailFor !== pin) return;
     map.getSource('cand-sel').setData({ type: 'Feature', geometry: c.geometry, properties: {} });
     if (fly) {
@@ -171,9 +244,9 @@
     $('detailBody').innerHTML = `
       <h3>${esc(c.address || 'No site address')}</h3>
       <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} <span class="score" style="background:${scoreColor(c.score)}">${c.score}</span></p>
-      ${c.excluded ? `<p class="warn">Hidden by default: ${esc(c.excluded)}</p>` : ''}
-      <section><h2>Score</h2><div class="bars">${bar('Fit', c.fit_score)}${bar('Owner', c.owner_score)}${bar('Market', c.market_score)}</div>
-        <p class="muted" style="font-size:12px;margin:0">Fit = zoning, size, how built-up. Owner = signs they might sell. Market = $200k+ households within 10 miles (${Math.round(c.marketTarget / 1000)}k or more = 100). Weights from <b>${esc(profile?.name ?? 'profile')}</b>: ${weightText(c.weights)}.</p></section>
+      ${c.hiddenBecause.length ? `<p class="warn">Not in this project's results: ${c.hiddenBecause.map(esc).join('; ')}</p>` : ''}
+      <section><h2>Score for ${esc(project.name)}</h2><div class="bars">${c.subscores.map((s) => bar(`${esc(s.label)} <span class="muted">${Math.round(s.share * 100)}%</span>`, s.value)).join('')}</div>
+        <p class="muted" style="font-size:12px;margin:0">Each line is 0–100; the percentage is its weight in this project's score (version ${project.spec_version}).</p></section>
       <section><h2>Zoning for a sports club <span class="pill ${VERDICT_PILL[c.sports_verdict]}">${esc(VERDICT_LABEL[c.sports_verdict])}</span></h2>
         <dl><dt>Zone</dt><dd>${esc(c.zoning || '—')}</dd></dl>
         <p style="margin:0;font-size:13px">${esc(c.sports_note)}</p>
@@ -211,7 +284,7 @@
     };
     $('cRevSave').onclick = async () => {
       try {
-        await api(`/api/candidates/${encodeURIComponent(c.pin)}`, { method: 'PATCH', body: { status: $('cRevStatus').value, notes: $('cRevNotes').value } });
+        await api(`/api/projects/${project.id}/reviews/${encodeURIComponent(c.pin)}`, { method: 'PATCH', body: { status: $('cRevStatus').value, notes: $('cRevNotes').value } });
         $('cRevMsg').className = 'msg'; $('cRevMsg').textContent = 'Saved.';
         const f = cand.features.find((x) => x.properties.pin === c.pin); if (f) f.properties.status = $('cRevStatus').value;
         renderCandList();

@@ -7,9 +7,9 @@ import { storeMatches, parcelsGeoJSON } from './parcels.js';
 import { ownershipFor } from './ownership.js';
 import { reachFor, reachWithin, blockGroupsGeoJSON, hasDemographics } from './demographics.js';
 import { getIsochrones, contoursByMinutes, pointInGeometry, hasMapbox } from './isochrone.js';
-import { listCandidates, getCandidate, reviewCandidate, REVIEW_STATUSES, KEY_FIELDS } from './candidates.js';
-import { listProfiles, getProfile, saveProfile, DEFAULT_PROFILE } from './profiles.js';
-import { KC_CODE_SOURCE } from './zoning-kc.js';
+import { KEY_FIELDS } from './candidates.js';
+import { listProjects, getProject, createProject, updateProject, projectHistory, reviewParcel, projectCandidates, projectCandidate, REVIEW_STATUSES } from './projects.js';
+import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS } from './spec.js';
 
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
 const app = express();
@@ -59,35 +59,45 @@ app.get('/api/parcels/:id/profile', wrap(async (req, res) => {
 }));
 
 // ---------- Candidates: every 5+ acre parcel, scored from free county data ----------
-// Search profiles: a buyer's lens over the shared data. Editing one re-scores instantly; nothing is re-fetched.
-app.get('/api/profiles', wrap(async (req, res) => res.json({ profiles: await listProfiles(), defaults: DEFAULT_PROFILE })));
-app.post('/api/profiles', wrap(async (req, res) => {
-  const id = await saveProfile(req.body ?? {}, req.userId);
-  res.json(await getProfile(id));
+// ---------- Projects: one buyer's search (docs/projects-spec.md) ----------
+const projectOr404 = async (id) => {
+  const p = await getProject(id);
+  if (!p) throw httpError(404, 'Project not found.');
+  return p;
+};
+app.get('/api/projects', wrap(async (req, res) => res.json({
+  projects: await listProjects(),
+  catalog: { requirements: REQUIREMENT_FIELDS, preferences: PREFERENCE_FIELDS, signals: SIGNAL_LABELS },
+})));
+app.post('/api/projects', wrap(async (req, res) => res.json(await createProject(req.body ?? {}, req.userId))));
+app.get('/api/projects/:id', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id);
+  res.json({ ...p, history: await projectHistory(p.id) });
 }));
+app.put('/api/projects/:id', wrap(async (req, res) => res.json(await updateProject(req.params.id, req.body ?? {}, req.userId))));
 
-app.get('/api/candidates', wrap(async (req, res) => res.json(await listCandidates(req.query, await getProfile(req.query.profile)))));
-
-app.get('/api/candidates/:pin', wrap(async (req, res) => {
-  const c = await getCandidate(req.params.pin, await getProfile(req.query.profile));
-  if (!c) throw httpError(404, 'Candidate not found.');
+app.get('/api/projects/:id/candidates', wrap(async (req, res) => res.json(await projectCandidates(await projectOr404(req.params.id), req.query))));
+app.get('/api/projects/:id/candidates/:pin', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id);
+  const c = await projectCandidate(p, req.params.pin);
+  if (!c) throw httpError(404, 'Parcel not found.');
   const enr = await one('SELECT raw_json, created_at FROM enrichments WHERE parcelnumb = ? ORDER BY id DESC LIMIT 1', [c.pin]);
-  res.json({ ...c, zoningSource: KC_CODE_SOURCE, keyFields: KEY_FIELDS,
-    enrichment: enr ? { fields: JSON.parse(enr.raw_json).fields ?? {}, created_at: enr.created_at } : null });
+  res.json({ ...c, keyFields: KEY_FIELDS, enrichment: enr ? { fields: JSON.parse(enr.raw_json).fields ?? {}, created_at: enr.created_at } : null });
+}));
+app.patch('/api/projects/:id/reviews/:pin', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id);
+  const { status, notes } = req.body ?? {};
+  if (status != null && !REVIEW_STATUSES.includes(status)) throw httpError(400, `Status must be one of: ${REVIEW_STATUSES.join(', ')}`);
+  if (!(await one('SELECT 1 FROM candidates WHERE pin = ?', [req.params.pin]))) throw httpError(404, 'Parcel not found.');
+  await reviewParcel(p.id, req.params.pin, { status, notes }, req.userId);
+  res.json({ ok: true });
 }));
 
+// Parcel facts shared by every project (the data layer).
 app.get('/api/candidates/:pin/profile', wrap(async (req, res) => {
   const c = await one('SELECT pin, lat, lng FROM candidates WHERE pin = ?', [req.params.pin]);
   if (!c) throw httpError(404, 'Candidate not found.');
   res.json(await profileFor(c.pin, c.lat, c.lng));
-}));
-
-app.patch('/api/candidates/:pin', wrap(async (req, res) => {
-  const { status, notes } = req.body ?? {};
-  if (status != null && !REVIEW_STATUSES.includes(status)) throw httpError(400, `Status must be one of: ${REVIEW_STATUSES.join(', ')}`);
-  if (!(await one('SELECT 1 FROM candidates WHERE pin = ?', [req.params.pin]))) throw httpError(404, 'Candidate not found.');
-  await reviewCandidate(req.params.pin, { status, notes }, req.userId);
-  res.json({ ok: true });
 }));
 
 app.post('/api/candidates/:pin/enrich', wrap(async (req, res) => {

@@ -39,19 +39,24 @@ node --env-file-if-exists=.env scripts/import-census.js
 
 ## Candidates (free county data)
 
-The Candidates tab lists every King County parcel of 5+ acres, scored 0–100 by a **search profile** (`profiles` table, `src/profiles.js`). The candidates table holds facts only; scores are computed at read time, so editing or adding a profile re-ranks instantly without re-fetching anything. The seeded "Field House" profile scores:
-- **Fit (40%)**: sports club zoning from King County Code 21A.08.050 (unincorporated only; city parcels show "unknown"), size against `criteria.json`, and vacancy.
-- **Owner (35%)**: held 20+/30+ years, no market sale on record, inherited, family or trust transfer, owner mails from another city or state, mostly land value. Bought within 3 years counts against.
-- **Market (25%)**: $200k+ households within 10 miles (straight line); 60k or more scores 100.
+The Candidates tab lists every King County parcel of 5+ acres, ranked for a **project** (`docs/projects-spec.md`).
+A project has a name, a brief and a versioned **criteria spec** (`src/spec.js`):
+- **Requirements** filter (acres, zoning verdict, city vs unincorporated, places, $200k+ households, land value per acre, vacant only, owner signals).
+- **Preferences** each give a 0–100 sub-score; the project score is their weighted average.
 
-Always hidden: tax-exempt parcels and public or institutional uses. Each profile can also hide zones where the use isn't allowed and parcels over a size cap (Field House: 80 acres).
+The candidates table holds facts only; projects are scored in SQL at read time, so editing criteria re-ranks instantly
+without re-fetching anything. Each spec change is saved as a new version with a note (`project_spec_history`).
+Shortlists and notes belong to a project (`project_reviews`). Always hidden: tax-exempt parcels and public or institutional uses.
+
+The Field House project reproduces the earlier scoring: zoning 18%, size 12%, vacancy 10%, owner signals 35%, $200k+ households 25%,
+requiring zoning that allows (or hasn't ruled out) a sports facility and 5–80 acres.
 
 Rebuild (after refreshing the raw files in `data/raw/`):
 ```
 npm run fetch:gis            # King County GIS parcels 5+ acres -> data/raw/gis-parcels.json
 npm run import:candidates    # needs account/EXTR_RPAcct_NoName.csv and parcel/EXTR_Parcel.csv
 ```
-Reviews (status, notes) are kept in `candidate_reviews` and survive rebuilds.
+Reviews (status, notes) are kept per project in `project_reviews` and survive rebuilds.
 
 ## Map overlays
 

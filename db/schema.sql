@@ -150,7 +150,6 @@ CREATE TABLE IF NOT EXISTS candidates (
   excluded TEXT,                     -- reason it's hidden by default, or NULL
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS candidates_score ON candidates (score DESC) WHERE excluded IS NULL;
 
 -- Review state for candidates, kept apart so rebuilding candidates never wipes it.
 CREATE TABLE IF NOT EXISTS candidate_reviews (
@@ -176,3 +175,47 @@ CREATE TABLE IF NOT EXISTS profiles (
 DROP INDEX IF EXISTS candidates_score;
 ALTER TABLE candidates DROP COLUMN IF EXISTS fit_score, DROP COLUMN IF EXISTS owner_score,
   DROP COLUMN IF EXISTS market_score, DROP COLUMN IF EXISTS score;
+
+-- Added Nov 21, 2026: projects (docs/projects-spec.md). A project is one buyer's search: brief,
+-- versioned criteria spec, and its own shortlist and notes. Replaces search profiles.
+CREATE TABLE IF NOT EXISTS projects (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  brief TEXT DEFAULT '',
+  spec TEXT NOT NULL,              -- JSON criteria spec (src/spec.js)
+  spec_version INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  archived BOOLEAN DEFAULT false
+);
+CREATE TABLE IF NOT EXISTS project_spec_history (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  spec TEXT NOT NULL,
+  change_note TEXT DEFAULT '',
+  source TEXT DEFAULT 'form',      -- form / markdown / interview / mcp / migration
+  changed_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS project_reviews (
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  pin TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'new',
+  notes TEXT DEFAULT '',
+  updated_by TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (project_id, pin)
+);
+CREATE TABLE IF NOT EXISTS project_members (
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'editor',   -- owner / editor / viewer
+  added_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (project_id, user_id)
+);
+
+-- Search profiles and global reviews were replaced by projects (Nov 21, 2026).
+DROP TABLE IF EXISTS profiles;
+DROP TABLE IF EXISTS candidate_reviews;

@@ -22,33 +22,27 @@
 
   <div id="tabCand">
     <div class="profileBar">
-      <label>Search profile <select id="cProfile" aria-label="Search profile"></select></label>
-      <details id="profEdit">
-        <summary>Edit profile</summary>
-        <form id="profForm">
-          <label>Name <input id="pName" type="text" maxlength="80"></label>
-          <div class="row">
-            <label>Target min acres <input id="pMinAc" type="number" min="0" step="1"></label>
-            <label>Target max acres <input id="pMaxAc" type="number" min="0" step="1"></label>
-          </div>
-          <p class="muted" style="margin:0;font-size:12px">How much each part counts toward the score:</p>
-          <div class="row3">
-            <label>Fit <input id="pWFit" type="number" min="0" max="100" step="5"></label>
-            <label>Owner <input id="pWOwner" type="number" min="0" max="100" step="5"></label>
-            <label>Market <input id="pWMarket" type="number" min="0" max="100" step="5"></label>
-          </div>
-          <div class="row">
-            <label>$200k+ households for a full market score <input id="pTarget" type="number" min="1000" step="5000"></label>
-            <label>Hide parcels over (acres) <input id="pMaxHide" type="number" min="0" step="10"></label>
-          </div>
-          <label class="check"><input id="pHideZoning" type="checkbox"> Hide parcels where zoning doesn't allow the use</label>
-          <div class="btnRow"><button id="pSave" type="submit">Save</button><button id="pSaveNew" type="button" class="secondary">Save as new profile</button></div>
-          <p id="pMsg" class="msg"></p>
+      <label>Project <select id="cProject" aria-label="Project"></select></label>
+      <details id="projEdit">
+        <summary>Project settings</summary>
+        <form id="projForm" novalidate>
+          <label>Name <input id="jName" type="text" maxlength="120"></label>
+          <label>Brief <textarea id="jBrief" rows="3" placeholder="Who it's for and what they need, in plain words."></textarea></label>
+          <h2 style="margin:6px 0 0">Requirements <span class="muted" style="text-transform:none;letter-spacing:0">must pass, or the parcel is hidden</span></h2>
+          <div id="jReqs" class="critList"></div>
+          <select id="jAddReq" aria-label="Add requirement"><option value="">+ Add requirement…</option></select>
+          <h2 style="margin:6px 0 0">Preferences <span class="muted" style="text-transform:none;letter-spacing:0">add points; weights are relative</span></h2>
+          <div id="jPrefs" class="critList"></div>
+          <select id="jAddPref" aria-label="Add preference"><option value="">+ Add preference…</option></select>
+          <label>What changed and why <input id="jNote" type="text" maxlength="300" placeholder="e.g. Dan wants flatter sites; raised slope weight"></label>
+          <div class="btnRow"><button id="jSave" type="submit">Save</button><button id="jSaveNew" type="button" class="secondary">Save as new project</button></div>
+          <p id="jMsg" class="msg"></p>
+          <details><summary class="muted" style="font-size:12px">Change history</summary><ol id="jHist" class="hist"></ol></details>
         </form>
       </details>
     </div>
     <form id="candForm">
-      <p class="muted" style="margin:0;font-size:12px">Every King County parcel of 5+ acres, from free county data, ranked by the profile above. Changing a profile re-ranks instantly; no data is re-fetched.</p>
+      <p class="muted" style="margin:0;font-size:12px">Every King County parcel of 5+ acres, from free county data, ranked by the project above. Changing a project's criteria re-ranks instantly; no data is re-fetched. These filters narrow the view without changing the project.</p>
       <div class="row">
         <label>Min acres <input id="cMinAc" type="number" min="0" step="1" value="13"></label>
         <label>Max acres <input id="cMaxAc" type="number" min="0" step="1" value="40"></label>

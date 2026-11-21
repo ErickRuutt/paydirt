@@ -86,7 +86,7 @@ passing or failing silently.
 
 ## Build order
 
-1. Projects + spec v1 (requirements vs preferences, project-owned shortlist and notes, history).
+1. ~~Projects + spec v1 (requirements vs preferences, project-owned shortlist and notes, history).~~ Done Nov 21, 2026 (`src/spec.js`, `src/projects.js`). Not yet: per-project access (`project_members` is recorded but not enforced), drive-time requirements, slope preferences, multiple uses in zoning.
 2. Markdown + interview compiler (one Claude-backed compiler, approval step, `why` quotes).
 3. MCP server over the same API, with keys and metering.
 4. Zoning rules for more uses (restaurant, office) so multi-use projects score correctly.
