@@ -8,7 +8,7 @@
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } } };
   const VERDICT_LABEL = { permitted: 'Permitted', conditional: 'Conditional use', prohibited: 'Not allowed', unknown: 'Unknown' };
   const VERDICT_PILL = { permitted: 'pass', conditional: 'review', prohibited: 'fail', unknown: 'unknown' };
-  const scoreClass = (s) => (s >= 75 ? 's4' : s >= 60 ? 's3' : s >= 45 ? 's2' : 's1'); // brand score ramp (styles.css)
+  const { chip: scoreChip, mapExpr: scoreMapExpr, scoreColor } = window.paydirtScore; // one ramp: chips, dots, legend, bars
   const where = (p) => p.city ? titleCase(p.city) : `Unincorporated${p.postal_city ? ' · ' + titleCase(p.postal_city) : ''}`;
   const titleCase = (s) => String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -33,7 +33,7 @@
     map.addLayer({
       id: 'cand-pt', type: 'circle', source: 'cand',
       paint: {
-        'circle-color': ['step', ['get', 'score'], '#B9A88E', 45, '#B8902A', 60, '#2E7A50', 75, '#1F4D36'],
+        'circle-color': scoreMapExpr('score'),
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, ['case', ['boolean', ['feature-state', 'sel'], false], 7, 3], 13, ['case', ['boolean', ['feature-state', 'sel'], false], 11, 7]],
         'circle-stroke-color': '#fff', 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 8, 0.5, 13, 1.5],
         'circle-opacity': 0.9,
@@ -73,10 +73,11 @@
     $('cList').innerHTML = shown.map(({ properties: p }) => `
       <li data-pin="${esc(p.pin)}" class="${p.pin === candSel ? 'sel' : ''}">
         <span class="t">${esc(p.address || 'No site address')} <span class="muted" style="font-weight:400">· ${esc(where(p))}</span></span>
-        <span class="score ${scoreClass(p.score)}">${p.score}</span>
+        ${scoreChip(p.score)}
         <span class="m">${fmt.ac(p.acres)} · ${esc(p.zoning || 'no zone')} (${esc(VERDICT_LABEL[p.sports_verdict] ?? p.sports_verdict)})${p.years_held != null ? ` · held ${Math.floor(p.years_held)}y` : ''}${p.hh200k_10mi != null ? ` · ${Math.round(p.hh200k_10mi / 1000)}k $200k+ hh in 10 mi` : ''}${p.status !== 'new' ? ` · <b>${esc(p.status)}</b>` : ''}</span>
         ${p.signals.slice(0, 3).map((s) => `<span class="chip">${esc(s)}</span>`).join('')}
       </li>`).join('') || '<li class="muted">No candidates match these filters.</li>';
+    window.paydirtTaper.apply($('cList'));
   }
   $('cList').onclick = (e) => { const li = e.target.closest('li[data-pin]'); if (li) selectCandidate(li.dataset.pin, true); };
 
@@ -240,22 +241,22 @@
     api(`/api/candidates/${encodeURIComponent(pin)}/profile`).then((r) => renderProfile(r, pin)).catch((e) => { const el = $('ownOut'); if (el) el.textContent = e.message; });
   }
 
-  const bar = (label, v) => `<span>${label}</span><span class="bar"><i style="width:${v}%"></i></span><span>${v}</span>`;
+  const bar = (label, v) => `<span>${label}</span><span class="bar"><i style="width:${v}%;background:${scoreColor(v)}"></i></span><span>${v}</span>`;
 
   function renderCandidate(c) {
     const landPerAc = c.land_value && c.acres ? c.land_value / c.acres : null;
     $('detailBody').innerHTML = `
       <h3>${esc(c.address || 'No site address')}</h3>
-      <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} <span class="score ${scoreClass(c.score)}">${c.score}</span></p>
-      ${c.hiddenBecause.length ? `<p class="warn">Not in this project's results: ${c.hiddenBecause.map(esc).join('; ')}</p>` : ''}
+      <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} ${scoreChip(c.score)}</p>
+      ${c.hiddenBecause.length ? `<p class="warn" data-taper="2">Not in this project's results: ${c.hiddenBecause.map(esc).join('; ')}</p>` : ''}
       <section><h2>Score for ${esc(project.name)}</h2><div class="bars">${c.subscores.map((s) => bar(`${esc(s.label)} <span class="muted">${Math.round(s.share * 100)}%</span>`, s.value)).join('')}</div>
         <p class="muted" style="font-size:12px;margin:0">Each line is 0–100; the percentage is its weight in this project's score (version ${project.spec_version}).</p></section>
       <section><h2>Zoning for a sports club <span class="pill ${VERDICT_PILL[c.sports_verdict]}">${esc(VERDICT_LABEL[c.sports_verdict])}</span></h2>
         <dl><dt>Zone</dt><dd>${esc(c.zoning || '—')}</dd></dl>
-        <p style="margin:0;font-size:13px">${esc(c.sports_note)}</p>
+        <p style="margin:0;font-size:13px" data-taper="3">${esc(c.sports_note)}</p>
         ${c.zoning_source ? `<p class="muted" style="font-size:12px;margin:0">Source: <a href="${esc(c.zoning_source)}" target="_blank" rel="noopener">${c.city ? esc(where(c)) + ' use table' : 'King County Code Title 21A (updated Sep 9, 2026)'}</a>, read Nov 2026. Confirm with the ${c.city ? 'city' : 'county'} before relying on it.</p>` : ''}</section>
       <section><h2>Owner signals</h2>
-        <div>${c.signals.map((s) => `<span class="chip">${esc(s)}</span>`).join('') || '<span class="muted">None found.</span>'}</div>
+        <div data-taper="2">${c.signals.map((s) => `<span class="chip">${esc(s)}</span>`).join('') || '<span class="muted">None found.</span>'}</div>
         <dl><dt>Tax bill mailed to</dt><dd>${esc(c.mail_city_state || '—')}</dd>
         ${c.current_use ? `<dt>Tax program</dt><dd>${esc(c.current_use)} (leaving it can trigger back taxes)</dd>` : ''}</dl></section>
       <section><h2>Ownership history</h2><div id="ownOut" class="muted">Loading…</div></section>
@@ -274,6 +275,7 @@
         <textarea id="cRevNotes" placeholder="Notes: site visit, owner contact, broker intel…">${esc(c.notes)}</textarea>
         <button id="cRevSave" class="secondary" type="button">Save review</button><p id="cRevMsg" class="msg"></p></section>`;
 
+    window.paydirtTaper.apply($('detailBody'));
     if (c.enrichment) showKeyFields(c.enrichment.fields, c.keyFields, c.enrichment.created_at);
     $('cEnrichBtn').onclick = async () => {
       $('cEnrichBtn').disabled = true; $('cEnrichMsg').className = 'msg'; $('cEnrichMsg').textContent = 'Checking…';

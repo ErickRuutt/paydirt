@@ -96,7 +96,7 @@
     el.innerHTML = `
       <div class="draft">
         <strong>${esc(d.name)}</strong>
-        <p style="margin:0">${esc(d.summary)}</p>
+        <p style="margin:0" data-taper="3">${esc(d.summary)}</p>
         <h2 style="margin:4px 0 0">Requirements</h2>
         <ul>${d.spec.requirements.map((r) => `<li><b>${esc(catalog.requirements[r.field].label)}:</b> ${esc(valueText(r, catalog))}${why(r.why)}</li>`).join('') || '<li class="muted">None</li>'}</ul>
         <h2 style="margin:4px 0 0">Preferences</h2>
@@ -112,6 +112,7 @@
         <p class="muted" style="margin:0;font-size:12px">You can fine-tune any of this afterwards in Project settings.</p>
         <p id="dMsg" class="msg"></p>
       </div>`;
+    window.paydirtTaper.apply(el);
     const apply = async (asRevision) => {
       if (d.errors.length && !d.spec.preferences.length) return;
       $('dMsg').className = 'msg'; $('dMsg').textContent = 'Saving…';
