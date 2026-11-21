@@ -36,3 +36,19 @@ node --env-file-if-exists=.env scripts/import-census.js
 - **Who's nearby:** households, $200k+ households, households with kids and approximate income within 5/10/15 miles (straight line, set in `criteria.json`). Census income brackets top out at $200k+, so that's the affluence measure.
 - **Drive time:** with `MAPBOX_TOKEN` (or `MAPBOX_API`) in `.env`, opening a parcel draws 20 and 30 minute drive areas (Mapbox Isochrone, typical traffic; `driveMinutes` in `criteria.json`) and counts the same Census numbers inside them. Results are cached in the `isochrones` table for 90 days; the token never reaches the browser.
 - **Map:** the "$200k+ households" layer shades block groups by share of $200k+ households.
+
+## Candidates (free county data)
+
+The Candidates tab lists every King County parcel of 5+ acres, scored 0–100:
+- **Fit (40%)**: sports club zoning from King County Code 21A.08.050 (unincorporated only; city parcels show "unknown"), size against `criteria.json`, and vacancy.
+- **Owner (35%)**: held 20+/30+ years, no market sale on record, inherited, family or trust transfer, owner mails from another city or state, mostly land value. Bought within 3 years counts against.
+- **Market (25%)**: $200k+ households within 10 miles (straight line); 60k or more scores 100.
+
+Hidden by default: tax-exempt parcels, public and institutional uses, zones where a sports club isn't allowed, and parcels over 80 acres.
+
+Rebuild (after refreshing the raw files in `data/raw/`):
+```
+npm run fetch:gis            # King County GIS parcels 5+ acres -> data/raw/gis-parcels.json
+npm run import:candidates    # needs account/EXTR_RPAcct_NoName.csv and parcel/EXTR_Parcel.csv
+```
+Reviews (status, notes) are kept in `candidate_reviews` and survive rebuilds.
