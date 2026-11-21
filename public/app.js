@@ -13,7 +13,8 @@ const USE_LABELS = { lit_fields: 'Lit outdoor fields', sports_club: 'Sports club
 let config, data = { type: 'FeatureCollection', features: [] }, selectedId = null, nextCursor = null;
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const token = await window.paydirtAuth.token(); // waits until someone is signed in
+  const res = await fetch(path, { ...opts, headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: opts.body ? JSON.stringify(opts.body) : undefined });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
   return json;

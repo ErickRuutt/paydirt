@@ -10,7 +10,7 @@
 <body>
 <aside id="panel">
   <header>
-    <h1>Paydirt</h1>
+    <div class="brand"><h1>Paydirt</h1><div id="userButton"></div></div>
     <p class="sub"><span id="county">King County, WA</span> · <span id="spend">$0.00 spent</span></p>
     <p id="keyWarn" class="warn" hidden>No Mireye key loaded. Run <code>mireye-mcp connect</code> or set <code>MIREYE_API_KEY</code> in <code>.env</code>.</p>
   </header>
@@ -74,6 +74,8 @@
 </aside>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<div id="signin" hidden><div class="signinCard"><h1>Paydirt</h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
+<script src="auth.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

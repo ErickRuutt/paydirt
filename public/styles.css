@@ -63,3 +63,9 @@ textarea { width: 100%; min-height: 60px; resize: vertical; }
   #map { height: 60vh; } #layers, #legend { left: 10px; } #layers { top: auto; bottom: 70px; }
   #detail { position: fixed; width: auto; left: 10px; }
 }
+
+.brand { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#signin { position: fixed; inset: 0; z-index: 50; background: rgba(245, 246, 243, .96); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
+#signin[hidden] { display: none; }
+.signinCard { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.signinCard .sub { margin: 0 0 12px; }

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --env-file-if-exists=.env --watch src/server.js",
-    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --watch src/server.js",
+    "start": "node --env-file-if-exists=.env --env-file-if-exists=.env.local src/server.js",
     "build": "node scripts/check.js",
     "db:migrate": "node --env-file-if-exists=.env scripts/db-migrate.js",
     "import:sales": "node --env-file-if-exists=.env scripts/import-sales.js",
@@ -15,6 +15,7 @@
     "node": ">=20.9"
   },
   "dependencies": {
+    "@clerk/express": "^2.1.96",
     "@neon/config": "^1.14.6",
     "@neon/env": "^2.1.9",
     "express": "^4.21.2",

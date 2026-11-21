@@ -1,4 +1,5 @@
 import express from 'express';
+import { clerkMiddleware, getAuth } from '@clerk/express';
 import { readFileSync } from 'node:fs';
 import { all, one, run, totalSpend } from './db.js';
 import { searchParcels, enrichParcel, hasKey, keySource, httpError } from './mireye.js';
@@ -15,6 +16,15 @@ app.use(express.static(new URL('../public/', import.meta.url).pathname));
 const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((err) => {
   res.status(err.status ?? 500).json({ error: err.message });
 });
+// Sign-in: the page and its static files are public; every /api route except the key lookup needs a Clerk session.
+app.get('/api/auth-config', (req, res) => res.json({ publishableKey: process.env.CLERK_PUBLISHABLE_KEY ?? null }));
+app.use('/api', clerkMiddleware(), (req, res, next) => {
+  const { userId } = getAuth(req);
+  if (!userId) return res.status(401).json({ error: 'Sign in required.' });
+  req.userId = userId;
+  next();
+});
+
 const parcelPoint = (id) => one('SELECT parcelnumb, lat, lng FROM parcels WHERE parcelnumb = ?', [id]);
 
 app.get('/api/config', wrap(async (req, res) => {
