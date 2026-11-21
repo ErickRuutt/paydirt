@@ -1,0 +1,36 @@
+{
+  "county": {
+    "state2": "WA",
+    "fips": "53033",
+    "name": "King"
+  },
+  "search": {
+    "acresMin": 13,
+    "acresMax": 40,
+    "minDevelopableAcres": 10,
+    "maxWetlandFraction": 0.25
+  },
+  "screen": {
+    "maxMedianSlopePct": 5,
+    "maxFracOver5Pct": 0.4,
+    "maxFloodFraction": 0.1,
+    "maxWetlandFraction": 0.15,
+    "minDevelopableAcres": 10
+  },
+  "uses": [
+    "lit_fields",
+    "sports_club",
+    "restaurant",
+    "office"
+  ],
+  "reachMiles": [
+    5,
+    10,
+    15
+  ],
+  "reachHeadlineMiles": 10,
+  "driveMinutes": [
+    20,
+    30
+  ]
+}
