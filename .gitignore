@@ -7,3 +7,5 @@ data/raw/
 .clerk/
 .DS_Store
 .neon
+.vercel
+.env*
