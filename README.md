@@ -96,3 +96,15 @@ buildings keep partial credit).
   Everything is scoped to the user's organization; everyone joins the "Paydirt" org for now.
 - `events` (`evt_…`): append-only log of property.saved / unsaved / status_changed. Nothing reads it yet. Reports
   across organizations must only ever use totals, never who saved what.
+
+## Feedback
+
+The gold **Feedback** button in the sidebar opens a pop-up on every page. Each entry is saved in the `feedback`
+table with who sent it, when and from which page, then copied to Notion when these are set (locally in `.env`,
+and in Vercel):
+
+1. Create a Notion internal integration (notion.so/profile/integrations) and copy its secret into `NOTION_TOKEN`.
+2. In Notion, open **Paydirt build plan › Feedback** → ••• → Connections → add the integration.
+3. `npm run setup:notion` creates the **Feedback log** table there and prints `NOTION_FEEDBACK_DB`.
+
+Without them, feedback is still saved in the database; `notion_error` records any failed copy.

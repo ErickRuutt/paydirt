@@ -9,3 +9,7 @@ data/raw/
 .neon
 .vercel
 .env*
+.claude/
+
+# Local retro log (ce-retro)
+.context/compound-engineering/

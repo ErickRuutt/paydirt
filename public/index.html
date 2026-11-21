@@ -7,77 +7,137 @@
 <link rel="icon" href="brand/simple.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="stylesheet" href="styles.css">
 <script>/* Apply the saved theme before first paint to avoid a flash. */ try { const t = localStorage.getItem('paydirt.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* storage blocked */ }</script>
 </head>
 <body class="page">
-<header class="topbar">
-  <div class="topbar-in">
-    <a href="index.html" class="wordmark">Pay<span>dirt</span></a>
+
+<nav class="sidenav" aria-label="Main">
+  <a href="index.html" class="wordmark" title="Your projects">Pay<span>dirt</span></a>
+  <div class="navLinks"><a href="index.html" aria-current="page">Projects</a><a href="map.html" id="navMap">Map</a><a href="project.html" id="navSaved">Saved</a></div>
+  <div class="navFoot">
+    <button type="button" id="feedbackBtn" class="feedbackBtn">Feedback</button>
     <span id="orgName" class="lblish"></span>
-    <div class="brand-right">
-      <div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
-      <div id="userButton"></div>
-    </div>
+    <div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
+    <div id="userButton"></div>
   </div>
-</header>
+</nav>
 
 <main class="page-in">
-  <section class="block">
-    <div class="block-head"><h2>Projects</h2><span id="projCount" class="lblish"></span></div>
-    <div id="projects" class="cards"><p class="muted">Loading…</p></div>
+  <section class="block" id="startBox">
+    <div class="block-head"><h1 class="title"><i class="tilt" aria-hidden="true"></i>new project</h1></div>
+    <div class="startOne">
+      <label for="startText" class="lbl">Describe the site you're looking for</label>
+      <textarea id="startText" rows="4" placeholder="e.g. 13–15 acres for youth sports fields, within 30 minutes of Redmond or Sammamish, near families with $200k+ incomes. Vacant land preferred."></textarea>
+      <div class="startActions">
+        <button id="startGo" type="button">Draft my project</button>
+        <label class="fileLink"><input id="startFile" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown"> or upload a brief</label>
+        <a class="expert" href="map.html?new=form">Set criteria yourself →</a>
+      </div>
+      <p id="startMsg" class="msg" role="status"></p>
+      <ol class="howItWorks"><li><b>Describe</b> the site in your own words.</li><li><b>See</b> every parcel in the county ranked for it.</li><li><b>Save</b> the best with ☆ and track each owner.</li></ol>
+      <div id="startOut"></div>
+    </div>
   </section>
 
   <section class="block">
-    <div class="block-head"><h2>Saved properties</h2><span id="savedCount" class="lblish"></span></div>
-    <p class="muted" style="margin:0 0 12px;font-size:13px">Every property saved to any of your projects, newest first. Save one with the ☆ on the map.</p>
-    <div id="saved"><p class="muted">Loading…</p></div>
+    <div class="block-head"><h2 class="title"><i class="tilt" aria-hidden="true"></i>projects</h2><span id="projCount" class="lblish"></span></div>
+    <div id="projects" class="projList"><p class="muted">Loading…</p></div>
   </section>
 </main>
 
 <div id="signin" hidden><div class="signinCard"><h1>Pay<span style="color:var(--accent)">dirt</span></h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="auth.js"></script>
 <script src="theme.js"></script>
+<script src="feedback.js"></script>
+<script src="score.js"></script>
+<script src="taper.js"></script>
 <script src="pages.js"></script>
+<script src="property.js"></script>
+<script src="start.js"></script>
 <script>
 (async () => {
   const { $, esc, api, where, siteTitle, ac, date, labels, STATUS_TEXT } = pd;
-  try {
+  const loaded = new Map(); // project id -> saved rows
+
+  function savedList(id, rows) {
+    if (!rows.length) return `<div class="empty"><b>Nothing saved to this project yet</b><p class="muted">Open the map and tap ☆ on a parcel.</p></div>`;
+    return `<ul class="savedList">${rows.map((p) => `<li><button type="button" class="savedRow" data-open="${id}" data-pin="${esc(p.pin)}">
+        ${p.score != null ? paydirtScore.chip(p.score) : '<span class="score none">–</span>'}
+        <span class="rowMain"><span class="t">${esc(siteTitle(p))}</span><span class="m">${ac(p.acres)} · ${esc(p.zoning || 'No zone')} · ${esc(where(p))}</span>
+          <span class="facts">${labels(p)}${p.hiddenByCriteria ? '<span class="pill fail">No longer fits</span>' : ''}</span></span>
+        <span class="tag ${p.status}">${esc(STATUS_TEXT[p.status] ?? p.status)}</span>
+        <span class="lblish">${date(p.saved_at)}</span>
+        <span class="go" aria-hidden="true">→</span>
+      </button></li>`).join('')}</ul>`;
+  }
+
+  async function toggle(card, force) {
+    const id = Number(card.dataset.id);
+    const open = force ?? card.dataset.open !== 'true';
+    card.dataset.open = String(open);
+    const btn = card.querySelector('[data-expand]');
+    btn.setAttribute('aria-expanded', String(open));
+    btn.querySelector('span').textContent = open ? 'Hide saved' : 'Show saved';
+    const box = card.querySelector('.projSaved');
+    box.hidden = !open;
+    if (!open) return;
+    if (!loaded.has(id) || force) {
+      box.innerHTML = '<p class="muted">Loading…</p>';
+      try { loaded.set(id, (await api(`/api/projects/${id}/saved`)).saved); }
+      catch (e) { box.innerHTML = `<p class="msg err">${esc(e.message)}</p>`; return; }
+    }
+    box.innerHTML = savedList(id, loaded.get(id));
+    window.paydirtTaper?.apply(box);
+  }
+
+  async function load() {
     const h = await api('/api/home');
     $('orgName').textContent = h.org?.name ?? '';
-    $('projCount').textContent = `${h.projects.length} active`;
+    $('projCount').textContent = `${h.projects.length} active · ${h.saved.length} saved`;
     $('projects').innerHTML = h.projects.map((p) => `
-      <article class="card">
-        <div class="card-top"><h3>${esc(p.name)}</h3><span class="lblish">v${p.spec_version}</span></div>
-        <p class="muted brief" data-taper="3">${esc(p.brief || 'No brief yet.')}</p>
-        <dl class="stats"><div><dt>Saved</dt><dd>${p.saved}</dd></div><div><dt>Shortlist</dt><dd>${p.shortlisted}</dd></div><div><dt>Criteria</dt><dd>${p.criteria}</dd></div><div><dt>Updated</dt><dd>${date(p.last_activity ?? p.updated_at)}</dd></div></dl>
-        <div class="btnRow"><a class="btn" href="map.html?project=${p.id}">Open map</a><a class="btn secondary" href="project.html?id=${p.id}">Saved properties</a></div>
-      </article>`).join('') + `
-      <article class="card start">
-        <h3>Start a project</h3>
-        <p class="muted">Describe what you're looking for and Paydirt ranks every parcel against it.</p>
-        <div class="startBtns">
-          <a class="btn secondary" href="map.html?new=brief">From a brief<small>Paste notes or upload a file</small></a>
-          <a class="btn secondary" href="map.html?new=interview">By interview<small>Answer a few questions</small></a>
-          <a class="btn secondary" href="map.html?new=form">Blank criteria<small>Set it up yourself</small></a>
+      <article class="proj" data-id="${p.id}" data-open="false">
+        <div class="projHead field">
+          <div class="projMain">
+            <div class="card-top"><h3>${esc(p.name)}</h3><span class="lblish">v${p.spec_version}</span></div>
+            <p class="brief" data-taper="2">${esc(p.brief || 'No brief yet.')}</p>
+            <dl class="stats"><div><dt>Shortlist</dt><dd>${p.shortlisted}</dd></div><div><dt>Criteria</dt><dd>${p.criteria}</dd></div><div><dt>Updated</dt><dd>${date(p.last_activity ?? p.updated_at)}</dd></div></dl>
+          </div>
+          <div class="projSide">
+            <div class="keyNum"><span class="big">${p.saved}</span><span class="lbl">saved</span></div>
+            <div class="btnCol">
+              <a class="btn" href="map.html?project=${p.id}">Open map</a>
+              <button type="button" class="paper" data-expand aria-expanded="false"><span>Show saved</span> <i aria-hidden="true">▾</i></button>
+            </div>
+          </div>
         </div>
-      </article>`;
-    $('savedCount').textContent = `${h.saved.length}`;
-    $('saved').innerHTML = h.saved.length ? `<div class="table-wrap"><table class="grid">
-      <thead><tr><th>Property</th><th>Project</th><th>Status</th><th>Saved</th><th></th></tr></thead>
-      <tbody>${h.saved.map((r) => `<tr>
-        <td><b>${esc(siteTitle(r))}</b><div class="muted small">${ac(r.acres)} · ${esc(r.zoning || 'No zone')} · ${esc(where(r))}</div><div class="facts">${labels(r)}</div></td>
-        <td>${esc(r.project_name)}</td>
-        <td><span class="pill ${r.status}">${esc(STATUS_TEXT[r.status] ?? r.status)}</span></td>
-        <td class="nowrap">${date(r.saved_at)}</td>
-        <td class="nowrap"><a href="map.html?project=${r.project_id}&pin=${encodeURIComponent(r.pin)}">Open on map</a></td>
-      </tr>`).join('')}</tbody></table></div>`
-      : `<div class="empty"><b>Nothing saved yet</b><p class="muted">Open a project's map and tap ☆ on any parcel to keep it here.</p></div>`;
-    window.paydirtTaper?.apply(document);
-  } catch (e) { $('projects').innerHTML = `<p class="msg err">${esc(e.message)}</p>`; $('saved').innerHTML = ''; }
+        <div class="projSaved" hidden></div>
+      </article>`).join('') || '<div class="empty"><b>No projects yet</b><p class="muted">Describe the site you want in the box above and Paydirt ranks every parcel for it.</p></div>';
+    window.paydirtTaper?.apply($('projects'));
+  }
+
+  $('projects').addEventListener('click', (e) => {
+    const ex = e.target.closest('[data-expand]');
+    if (ex) return toggle(ex.closest('.proj'));
+    const row = e.target.closest('[data-open]');
+    if (row) paydirtProperty.open(Number(row.dataset.open), row.dataset.pin);
+  });
+  // The modal tells us when something changed (status, saved), so the counts and list stay true.
+  document.addEventListener('paydirt:changed', async (e) => {
+    const openIds = [...document.querySelectorAll('.proj[data-open="true"]')].map((c) => c.dataset.id);
+    loaded.clear(); await load();
+    for (const id of openIds) { const c = document.querySelector(`.proj[data-id="${id}"]`); if (c) await toggle(c, true); }
+  });
+
+  try {
+    await load();
+    // Open the first project by default so saved properties are one glance away.
+    const first = document.querySelector('.proj'); if (first) await toggle(first, true);
+  } catch (e) { $('projects').innerHTML = `<p class="msg err">${esc(e.message)}</p>`; }
 })();
 </script>
-<script src="taper.js"></script>
 </body>
 </html>

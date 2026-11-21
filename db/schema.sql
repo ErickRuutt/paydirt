@@ -285,3 +285,20 @@ CREATE TABLE IF NOT EXISTS events (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS events_property ON events (property_uid, type);
+
+-- Added Nov 21, 2026: in-app feedback. Kept here first so nothing is lost; also sent to Notion
+-- (NOTION_TOKEN + NOTION_FEEDBACK_DB) for review. notion_error holds why a send failed.
+CREATE TABLE IF NOT EXISTS feedback (
+  feedback_uid TEXT PRIMARY KEY,
+  user_uid TEXT REFERENCES users(user_uid),
+  org_uid TEXT,
+  name TEXT,
+  email TEXT,
+  kind TEXT NOT NULL DEFAULT 'idea',
+  message TEXT NOT NULL,
+  page TEXT,
+  notion_page_id TEXT,
+  notion_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS feedback_created ON feedback (created_at DESC);

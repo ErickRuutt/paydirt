@@ -8,29 +8,41 @@
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="styles.css">
 <script>/* Apply the saved theme before first paint to avoid a flash. */ try { const t = localStorage.getItem('paydirt.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* storage blocked */ }</script>
 </head>
 <body class="map">
+<nav class="sidenav" aria-label="Main">
+  <a href="index.html" class="wordmark" title="Your projects">Pay<span>dirt</span></a>
+  <div class="navLinks"><a href="index.html">Projects</a><a href="map.html" id="navMap" aria-current="page">Map</a><a href="project.html" id="navSaved">Saved</a></div>
+  <div class="navFoot">
+    <button type="button" id="feedbackBtn" class="feedbackBtn">Feedback</button>
+    <span id="orgName" class="lblish"></span>
+    <div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
+    <div id="userButton"></div>
+  </div>
+</nav>
+
 <aside id="panel">
-  <header>
-    <div class="brand"><h1><a href="index.html" class="home" title="Back to your projects">Pay<span>dirt</span></a></h1><div class="brand-right"><div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div><div id="userButton"></div></div></div>
-    <p class="sub"><a href="index.html" class="back">← Projects</a> · <span id="county">King County, WA</span> · <span id="spend">$0.00 spent</span></p>
+  <header class="panelHead">
+    <p class="lbl">Project</p>
+    <h1 id="projTitle" class="title">&nbsp;</h1>
+    <p class="sub"><span id="county">King County, WA</span> · <span id="spend">$0.00 spent</span></p>
     <p id="keyWarn" class="warn" hidden>No Mireye key loaded. Run <code>mireye-mcp connect</code> or set <code>MIREYE_API_KEY</code> in <code>.env</code>.</p>
   </header>
 
   <nav class="tabs" role="tablist">
-    <button type="button" role="tab" id="tabBtnCand" aria-selected="true">Candidates</button>
-    <button type="button" role="tab" id="tabBtnSearch" aria-selected="false">Mireye search</button>
+    <button type="button" role="tab" id="tabBtnCand" aria-selected="true">Best matches</button>
+    <button type="button" role="tab" id="tabBtnSearch" aria-selected="false">Paid search</button>
   </nav>
 
   <div id="tabCand">
     <div class="profileBar">
       <label>Project <select id="cProject" aria-label="Project"></select></label>
-      <div class="btnRow"><button id="bBrief" type="button" class="secondary">New from a brief</button><button id="bInterview" type="button" class="secondary">Build by interview</button></div>
+      <div class="btnRow" hidden><button id="bBrief" type="button" class="secondary">New from a brief</button><button id="bInterview" type="button" class="secondary">Build by interview</button></div>
       <details id="projEdit">
-        <summary>Project settings</summary>
+        <summary>Edit what this project looks for</summary>
         <form id="projForm" novalidate>
           <label>Name <input id="jName" type="text" maxlength="120"></label>
           <label>Brief <textarea id="jBrief" rows="3" placeholder="Who it's for and what they need, in plain words."></textarea></label>
@@ -47,27 +59,29 @@
         </form>
       </details>
     </div>
+    <details class="refine"><summary>Refine results</summary>
     <form id="candForm">
-      <p class="muted" style="margin:0;font-size:12px">Every King County parcel of 5+ acres, from free county data, ranked by the project above. Changing a project's criteria re-ranks instantly; no data is re-fetched. These filters narrow the view without changing the project.</p>
+      <p class="muted" style="margin:0;font-size:12px">Narrows this list and the map. It doesn't change the project.</p>
       <div class="row">
         <label>Min acres <input id="cMinAc" type="number" min="0" step="1" value="13"></label>
         <label>Max acres <input id="cMaxAc" type="number" min="0" step="1" value="40"></label>
       </div>
       <div class="row">
-        <label>Sports club zoning
+        <label>Zoning allows the use
           <select id="cVerdict"><option value="permitted,conditional,unknown">Allowed or unknown</option><option value="permitted,conditional">Allowed (county code)</option><option value="permitted">Permitted outright</option><option value="unknown">Inside a city (unread)</option></select></label>
-        <label>Min score <input id="cMinScore" type="number" min="0" max="100" step="5" value="0"></label>
+        <label>Only matches above <input id="cMinScore" type="number" min="0" max="100" step="5" value="0"></label>
       </div>
       <div class="row">
-        <label>Area <input id="cArea" type="text" placeholder="e.g. Redmond, Duvall"></label>
-        <label>Owner signal
+        <label>Town or area <input id="cArea" type="text" placeholder="e.g. Redmond, Duvall"></label>
+        <label>Likely to sell
           <select id="cSignal"><option value="">Any</option><option value="held">Held 20+ years</option><option value="inherit">Inherited</option><option value="family or trust">Family or trust transfer</option><option value="no market sale">No market sale on record</option><option value="out of state">Owner out of state</option><option value="mostly land">Little or no building</option></select></label>
       </div>
       <label>What's on the site <select id="cSite"><option value="">Anything</option><option value="vacant-land">Vacant land only</option><option value="-operating-business">Hide operating businesses</option><option value="closing-tenant">Closing or bankrupt tenant</option><option value="possible-empty-building">Possible empty building</option><option value="leased-to-business">Leased to a business</option><option value="anchor-tenant">Major anchor tenant</option></select></label>
-      <label>Review status <select id="cStatus"><option value="">Any</option><option value="saved">Saved</option><option value="shortlist">Shortlist</option><option value="contacted">Contacted</option><option value="rejected">Rejected</option></select></label>
+      <label>Your status <select id="cStatus"><option value="">Any</option><option value="saved">Saved</option><option value="shortlist">Shortlist</option><option value="contacted">Contacted</option><option value="rejected">Rejected</option></select></label>
     </form>
+    </details>
     <section>
-      <div class="listHead"><h2>Candidates <span id="cCount" class="muted"></span></h2></div>
+      <div class="listHead"><h2>Best matches <span id="cCount" class="muted"></span></h2></div>
       <ul id="cList" class="list"></ul>
     </section>
   </div>
@@ -150,6 +164,7 @@
 <script src="score.js"></script>
 <script src="taper.js"></script>
 <script src="theme.js"></script>
+<script src="feedback.js"></script>
 <script src="app.js"></script>
 <script src="candidates.js"></script>
 <script src="overlays.js"></script>

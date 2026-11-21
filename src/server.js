@@ -12,6 +12,7 @@ import { listProjects, getProject, createProject, updateProject, projectHistory,
 import { ensureUser } from './identity.js';
 import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS, TAG_LABELS } from './spec.js';
 import { draftFromText, interviewTurn, hasClaude } from './compiler.js';
+import { logFeedback } from './feedback.js';
 
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
 const app = express();
@@ -122,6 +123,9 @@ app.get('/api/projects/:id/saved', wrap(async (req, res) => {
   res.json({ project: { id: p.id, project_uid: p.project_uid, name: p.name, brief: p.brief, spec_version: p.spec_version },
     saved: rows.map((r) => ({ ...r, ...(byPin.get(r.pin) ?? {}), status: r.status, hiddenByCriteria: !byPin.has(r.pin) })) });
 }));
+
+// ---------- Feedback (saved here, copied to Notion for review) ----------
+app.post('/api/feedback', wrap(async (req, res) => res.json(await logFeedback(req.user, req.userId, req.body ?? {}))));
 
 // ---------- Home: who you are, your projects, everything saved across them ----------
 app.get('/api/me', wrap(async (req, res) => {

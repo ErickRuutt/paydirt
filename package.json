@@ -14,7 +14,8 @@
     "import:candidates": "node --env-file-if-exists=.env scripts/import-candidates.js",
     "fetch:boundaries": "node scripts/fetch-boundaries.js",
     "fetch:osm": "node scripts/fetch-osm-pois.js",
-    "sql": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/sql.js"
+    "sql": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/sql.js",
+    "setup:notion": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/setup-notion-feedback.js"
   },
   "engines": {
     "node": ">=20.9"

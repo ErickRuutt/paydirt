@@ -96,7 +96,7 @@
 
   function renderCandList() {
     const shown = cand.features.slice(0, 150);
-    $('cCount').textContent = `(${cand.total.toLocaleString()}${cand.total > shown.length ? `, top ${shown.length} listed` : ''})`;
+    $('cCount').textContent = `· ${cand.total.toLocaleString()} fit${cand.total > shown.length ? `, best ${shown.length} shown` : ''}`;
     $('cList').innerHTML = shown.map(({ properties: p }) => `
       <li data-pin="${esc(p.pin)}" class="row ${p.pin === candSel ? 'sel' : ''}">
         ${scoreChip(p.score)}
@@ -148,6 +148,8 @@
 
   function applyProject() {
     store.set('paydirt.project', String(project.id));
+    $('projTitle').textContent = project.name;
+    for (const [n, h] of [['navMap', `map.html?project=${project.id}`], ['navSaved', `project.html?id=${project.id}`]]) { const a = document.getElementById(n); if (a) a.href = h; }
     draft = structuredClone(project.spec);
     const acres = draft.preferences.find((p) => p.field === 'acres')?.params;
     if (acres) { $('cMinAc').value = acres.min; $('cMaxAc').value = acres.max; } else { $('cMinAc').value = ''; $('cMaxAc').value = ''; }
@@ -302,8 +304,8 @@
       <h3>${esc(c.address || 'No site address')}</h3>
       <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} ${scoreChip(c.score)}</p>
       ${c.hiddenBecause.length ? `<p class="warn" data-taper="2">Not in this project's results: ${c.hiddenBecause.map(esc).join('; ')}</p>` : ''}
-      <section><h2>Score for ${esc(project.name)}</h2><div class="bars">${c.subscores.map((s) => bar(`${esc(s.label)} <span class="muted">${Math.round(s.share * 100)}%</span>`, s.value)).join('')}</div>
-        <p class="muted" style="font-size:12px;margin:0">Each line is 0–100; the percentage is its weight in this project's score (version ${project.spec_version}).</p></section>
+      <section><h2>Why it scores ${c.score}</h2><div class="bars">${c.subscores.map((s) => bar(`${esc(s.label)} <span class="muted">${Math.round(s.share * 100)}%</span>`, s.value)).join('')}</div>
+        <p class="muted" style="font-size:12px;margin:0">Each line is how well it meets one thing ${esc(project.name)} wants (100 = fully). The percentage is how much that thing counts.</p></section>
       <section><h2>On this site</h2>
         <div class="tagRow">${(c.tags ?? []).map((t) => `<span class="pill ${TAG_TONE[t] ?? ''}">${esc(TAG_TEXT[t] ?? t)}</span>`).join('') || '<span class="muted">No site tags.</span>'}</div>
         <dl><dt>Owner type</dt><dd>${esc(OWNER_TEXT[c.owner_type] ?? 'Unknown')}</dd><dt>Building value</dt><dd>${c.impr_value != null && c.acres ? `${fmt.usd(c.impr_value / c.acres)} per acre` : '—'}</dd></dl>
