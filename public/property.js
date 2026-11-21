@@ -37,7 +37,7 @@ window.paydirtProperty = (() => {
 
   function ensureMap() {
     if (map) return Promise.resolve();
-    map = new maplibregl.Map({ container: 'pmMap', style: 'https://tiles.openfreemap.org/styles/liberty', center: [-122.05, 47.6], zoom: 9, attributionControl: { compact: true } });
+    map = new maplibregl.Map({ container: 'pmMap', style: paydirtBasemapStyle(), center: [-122.05, 47.6], zoom: 9, attributionControl: { compact: true } });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'imperial' }), 'bottom-right');
     return new Promise((resolve) => map.on('load', () => {

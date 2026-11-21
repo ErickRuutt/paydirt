@@ -24,7 +24,7 @@ async function api(path, opts = {}) {
 // ---------- Map ----------
 const map = new maplibregl.Map({
   container: 'map',
-  style: 'https://tiles.openfreemap.org/styles/liberty',
+  style: paydirtBasemapStyle(),
   center: [-122.05, 47.6],
   zoom: 9,
   maxPitch: 75,

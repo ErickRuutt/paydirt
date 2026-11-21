@@ -1,4 +1,11 @@
 /* Theme switch shared by every page: Auto follows the system; Light/Dark are saved per browser. */
+const isDarkTheme = () => {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+};
+/* The basemap style is chosen when a map is created; maps are not restyled in place. */
+window.paydirtBasemapStyle = () => new URL(isDarkTheme() ? 'map-style-dark.json' : 'map-style-light.json', location.href).href;
+
 (() => {
   const btns = [...document.querySelectorAll('[data-theme-set]')];
   const apply = (mode) => {
@@ -9,7 +16,12 @@
   };
   let saved = null; try { saved = localStorage.getItem('paydirt.theme'); } catch { /* storage blocked */ }
   apply(saved);
-  for (const b of btns) b.onclick = () => apply(b.dataset.themeSet);
+  /* A map keeps the basemap it was created with, so a theme change that flips light/dark reloads map pages. */
+  for (const b of btns) b.onclick = () => {
+    const wasDark = isDarkTheme();
+    apply(b.dataset.themeSet);
+    if (isDarkTheme() !== wasDark && (document.getElementById('map') || document.getElementById('pmMap'))) location.reload();
+  };
 })();
 
 /* Top bar: Map and Saved follow the project you're in (or last used). */
