@@ -1,7 +1,6 @@
-// Build the candidates table: every King County parcel of 5+ acres, scored for
-//   fit    – can a sports club go here (zoning), size, how built-up it is
-//   owner  – signs the owner might sell (long hold, inheritance, trust, absentee, underused land)
-//   market – $200k+ households within 10 miles (straight line)
+// Build the candidates table: every King County parcel of 5+ acres, with the facts profiles score on.
+// Facts only — zoning verdict, size, use, owner signals, $200k+ households within 10 miles.
+// Scoring happens at read time from a search profile (src/profiles.js).
 // Free county data only. Inputs in data/raw/:
 //   gis-parcels.json            (npm run fetch:gis — boundaries, address, zoning, use, values)
 //   account/EXTR_RPAcct_NoName.csv (Real Property Account.zip — mailing address, tax status)
@@ -17,7 +16,7 @@ import { sportsClubVerdict } from '../src/zoning-kc.js';
 
 const RAW = new URL('../data/raw/', import.meta.url).pathname;
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
-const { acresMin, acresMax } = criteria.search;
+
 
 async function* csv(file) {
   let header = null;
@@ -85,7 +84,6 @@ function reach10(lat, lng) {
   return { rich, share: hh ? rich / hh : null, kids: hh ? kids / hh : null };
 }
 const PUBLIC_USE = /^(Park, Public|School|Right of Way|Utility, Public|Governmental|Golf|Cemetery|Water Body|Reserve\/Wilderness|Military|Tideland|Church|Condominium|Apartment|Mobile Home Park|Open Space)/i;
-const clamp = (x) => Math.max(0, Math.min(100, Math.round(x)));
 
 // --- Score ---------------------------------------------------------------------------------
 const rows = [];
@@ -108,49 +106,28 @@ for (const f of gis) {
   const absentee = mailCity && postal ? mailCity !== postal : null;
   const cu = currentUse.get(pin) ?? null;
 
-  // Fit: zoning, size, how built-up.
-  const zoningPts = { permitted: 45, conditional: 30, unknown: 15, prohibited: 0 }[sports.verdict];
-  const sizePts = p.KCA_ACRES >= acresMin && p.KCA_ACRES <= acresMax ? 30 : p.KCA_ACRES >= 8 && p.KCA_ACRES < acresMin ? 15 : 5;
-  const usePts = /^vacant/i.test(use ?? '') ? 25 : /single family|mobile home|agricultur/i.test(use ?? '') ? 12 : 0;
-  const fit = clamp(zoningPts + sizePts + usePts);
-
-  // Owner: signs they might sell.
+  // Owner signals (facts; profiles turn them into points at read time).
   const signals = [...(own.signals ?? []).filter((s) => s !== 'no recorded sales')];
-  let ownPts = 0;
   const yh = own.yearsSinceMarketSale;
-  if (yh != null && yh >= 30) ownPts += 35; else if (yh != null && yh >= 20) ownPts += 25;
-  if (own.records && yh == null) ownPts += 25;
-  if (signals.includes('recently inherited')) ownPts += 30; else if (signals.includes('inherited')) ownPts += 20;
-  if (signals.includes('last transfer was family or trust')) ownPts += 15;
-  if (signals.includes('bought within 3 years')) ownPts -= 25;
-  if (outOfState) { ownPts += 15; signals.push('owner mails from out of state'); }
-  else if (absentee) { ownPts += 10; signals.push('owner mails from another city'); }
+  if (outOfState) signals.push('owner mails from out of state');
+  else if (absentee) signals.push('owner mails from another city');
   const landShare = land != null && impr != null && land + impr > 0 ? land / (land + impr) : null;
-  if (landShare != null && landShare >= 0.85 && land > 0) { ownPts += 15; signals.push('mostly land value (little or no building)'); }
+  if (landShare != null && landShare >= 0.85 && land > 0) signals.push('mostly land value (little or no building)');
   if (cu) signals.push(`in ${cu.toLowerCase()} tax program`);
-  const ownerScore = clamp(ownPts);
-
-  // Market: $200k+ households within 10 miles; 60k or more scores 100.
-  const market = mkt.rich == null ? 0 : clamp((mkt.rich / 60000) * 100);
-
-  const score = clamp(0.4 * fit + 0.35 * ownerScore + 0.25 * market);
-
   let excluded = null;
   if (acct.taxStat === 'X') excluded = 'tax exempt (public, tribal or nonprofit)';
   else if (use && PUBLIC_USE.test(use)) excluded = `public or institutional use (${use})`;
-  else if (sports.verdict === 'prohibited') excluded = `zoning: ${sports.note}`;
-  else if (p.KCA_ACRES > 80) excluded = 'over 80 acres';
 
   rows.push([pin, p.ADDR_FULL?.trim() || null, city, postal, p.ZIP5 || null, p.KCA_ACRES, zone, sports.verdict, sports.note, sports.source ?? null, use, p.PROPTYPE ?? null,
     land, impr, acct.taxStat || null, cu, acct.addr || null, acct.cityState || null, absentee, outOfState, lat, lng, JSON.stringify(f.geometry),
     yh ?? null, own.yearsSinceTransfer ?? null, JSON.stringify(signals), mkt.rich, mkt.share, mkt.kids,
-    fit, ownerScore, market, score, excluded]);
+    excluded]);
 }
 
 const COLS = ['pin', 'address', 'city', 'postal_city', 'zip', 'acres', 'zoning', 'sports_verdict', 'sports_note', 'zoning_source', 'present_use', 'prop_type',
   'land_value', 'impr_value', 'tax_status', 'current_use', 'mail_address', 'mail_city_state', 'absentee', 'out_of_state', 'lat', 'lng', 'geometry_json',
   'years_held', 'years_since_transfer', 'signals', 'hh200k_10mi', 'share200k_10mi', 'kids_share_10mi',
-  'fit_score', 'owner_score', 'market_score', 'score', 'excluded'];
+  'excluded'];
 
 const client = await connect();
 await client.query('BEGIN');
@@ -162,6 +139,6 @@ await client.query('ANALYZE candidates');
 const { rows: summary } = await client.query(`SELECT count(*) FILTER (WHERE excluded IS NULL) AS shown, count(*) AS total,
   count(*) FILTER (WHERE excluded IS NULL AND sports_verdict = 'permitted') AS permitted,
   count(*) FILTER (WHERE excluded IS NULL AND sports_verdict = 'conditional') AS conditional,
-  count(*) FILTER (WHERE excluded IS NULL AND sports_verdict = 'unknown') AS city_unknown FROM candidates`);
+  count(*) FILTER (WHERE excluded IS NULL AND sports_verdict = 'unknown') AS unknown FROM candidates`);
 await client.end();
 console.log('Candidates:', summary[0]);

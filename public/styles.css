@@ -81,3 +81,11 @@ textarea { width: 100%; min-height: 60px; resize: vertical; }
 .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--pine); }
 .pill.new { background: var(--muted); } .pill.shortlist { background: var(--pine); } .pill.contacted { background: #3f7f9f; } .pill.rejected { background: var(--fail); }
+
+.profileBar { display: flex; flex-direction: column; gap: 8px; }
+.profileBar > label select { font-weight: 600; }
+#profEdit summary { cursor: pointer; color: var(--pine); font-size: 13px; }
+#profForm { margin-top: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.btnRow { display: flex; gap: 8px; flex-wrap: wrap; }
+label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--fg); }

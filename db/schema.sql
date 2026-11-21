@@ -163,3 +163,16 @@ CREATE TABLE IF NOT EXISTS candidate_reviews (
 
 -- Added Nov 21, 2026: where each zoning verdict came from (county or city code URL).
 ALTER TABLE candidates ADD COLUMN IF NOT EXISTS zoning_source TEXT;
+
+-- Added Nov 21, 2026: search profiles. Scores are computed from a profile at read time, so the
+-- candidates table holds facts only.
+CREATE TABLE IF NOT EXISTS profiles (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  config TEXT NOT NULL,          -- JSON, see src/profiles.js DEFAULT_PROFILE
+  created_by TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+DROP INDEX IF EXISTS candidates_score;
+ALTER TABLE candidates DROP COLUMN IF EXISTS fit_score, DROP COLUMN IF EXISTS owner_score,
+  DROP COLUMN IF EXISTS market_score, DROP COLUMN IF EXISTS score;

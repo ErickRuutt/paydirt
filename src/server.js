@@ -8,6 +8,7 @@ import { ownershipFor } from './ownership.js';
 import { reachFor, reachWithin, blockGroupsGeoJSON, hasDemographics } from './demographics.js';
 import { getIsochrones, contoursByMinutes, pointInGeometry, hasMapbox } from './isochrone.js';
 import { listCandidates, getCandidate, reviewCandidate, REVIEW_STATUSES, KEY_FIELDS } from './candidates.js';
+import { listProfiles, getProfile, saveProfile, DEFAULT_PROFILE } from './profiles.js';
 import { KC_CODE_SOURCE } from './zoning-kc.js';
 
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
@@ -58,10 +59,17 @@ app.get('/api/parcels/:id/profile', wrap(async (req, res) => {
 }));
 
 // ---------- Candidates: every 5+ acre parcel, scored from free county data ----------
-app.get('/api/candidates', wrap(async (req, res) => res.json(await listCandidates(req.query))));
+// Search profiles: a buyer's lens over the shared data. Editing one re-scores instantly; nothing is re-fetched.
+app.get('/api/profiles', wrap(async (req, res) => res.json({ profiles: await listProfiles(), defaults: DEFAULT_PROFILE })));
+app.post('/api/profiles', wrap(async (req, res) => {
+  const id = await saveProfile(req.body ?? {}, req.userId);
+  res.json(await getProfile(id));
+}));
+
+app.get('/api/candidates', wrap(async (req, res) => res.json(await listCandidates(req.query, await getProfile(req.query.profile)))));
 
 app.get('/api/candidates/:pin', wrap(async (req, res) => {
-  const c = await getCandidate(req.params.pin);
+  const c = await getCandidate(req.params.pin, await getProfile(req.query.profile));
   if (!c) throw httpError(404, 'Candidate not found.');
   const enr = await one('SELECT raw_json, created_at FROM enrichments WHERE parcelnumb = ? ORDER BY id DESC LIMIT 1', [c.pin]);
   res.json({ ...c, zoningSource: KC_CODE_SOURCE, keyFields: KEY_FIELDS,

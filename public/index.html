@@ -21,8 +21,34 @@
   </nav>
 
   <div id="tabCand">
+    <div class="profileBar">
+      <label>Search profile <select id="cProfile" aria-label="Search profile"></select></label>
+      <details id="profEdit">
+        <summary>Edit profile</summary>
+        <form id="profForm">
+          <label>Name <input id="pName" type="text" maxlength="80"></label>
+          <div class="row">
+            <label>Target min acres <input id="pMinAc" type="number" min="0" step="1"></label>
+            <label>Target max acres <input id="pMaxAc" type="number" min="0" step="1"></label>
+          </div>
+          <p class="muted" style="margin:0;font-size:12px">How much each part counts toward the score:</p>
+          <div class="row3">
+            <label>Fit <input id="pWFit" type="number" min="0" max="100" step="5"></label>
+            <label>Owner <input id="pWOwner" type="number" min="0" max="100" step="5"></label>
+            <label>Market <input id="pWMarket" type="number" min="0" max="100" step="5"></label>
+          </div>
+          <div class="row">
+            <label>$200k+ households for a full market score <input id="pTarget" type="number" min="1000" step="5000"></label>
+            <label>Hide parcels over (acres) <input id="pMaxHide" type="number" min="0" step="10"></label>
+          </div>
+          <label class="check"><input id="pHideZoning" type="checkbox"> Hide parcels where zoning doesn't allow the use</label>
+          <div class="btnRow"><button id="pSave" type="submit">Save</button><button id="pSaveNew" type="button" class="secondary">Save as new profile</button></div>
+          <p id="pMsg" class="msg"></p>
+        </form>
+      </details>
+    </div>
     <form id="candForm">
-      <p class="muted" style="margin:0;font-size:12px">Every King County parcel of 5+ acres, scored from free county data. Ranked by fit, owner signals and nearby $200k+ households.</p>
+      <p class="muted" style="margin:0;font-size:12px">Every King County parcel of 5+ acres, from free county data, ranked by the profile above. Changing a profile re-ranks instantly; no data is re-fetched.</p>
       <div class="row">
         <label>Min acres <input id="cMinAc" type="number" min="0" step="1" value="13"></label>
         <label>Max acres <input id="cMaxAc" type="number" min="0" step="1" value="40"></label>

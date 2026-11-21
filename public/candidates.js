@@ -4,6 +4,8 @@
 (() => {
   let cand = { type: 'FeatureCollection', features: [], total: 0 };
   let candSel = null;
+  let profiles = [], profile = null;
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } } };
   const VERDICT_LABEL = { permitted: 'Permitted', conditional: 'Conditional use', prohibited: 'Not allowed', unknown: 'Unknown' };
   const VERDICT_PILL = { permitted: 'pass', conditional: 'review', prohibited: 'fail', unknown: 'unknown' };
   const scoreColor = (s) => (s >= 75 ? '#1f5c45' : s >= 60 ? '#2e8b57' : s >= 45 ? '#c99a1b' : '#a59f8f');
@@ -40,7 +42,7 @@
     map.on('click', 'cand-pt', (e) => selectCandidate(e.features[0].properties.pin, false));
     map.on('mouseenter', 'cand-pt', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'cand-pt', () => { map.getCanvas().style.cursor = ''; });
-    loadCandidates();
+    loadProfiles().then(loadCandidates).catch(showErr);
   });
 
   // ---------- Data ----------
@@ -51,6 +53,7 @@
     set('minAcres', $('cMinAc').value); set('maxAcres', $('cMaxAc').value);
     set('verdict', $('cVerdict').value); set('minScore', +$('cMinScore').value || '');
     set('area', $('cArea').value.trim()); set('signal', $('cSignal').value); set('status', $('cStatus').value);
+    if (profile?.id) set('profile', profile.id);
     const key = q.toString();
     pending = key;
     $('cCount').textContent = '(loading…)';
@@ -78,6 +81,57 @@
   }
   $('cList').onclick = (e) => { const li = e.target.closest('li[data-pin]'); if (li) selectCandidate(li.dataset.pin, true); };
 
+  // ---------- Profiles ----------
+  const weightText = (w) => { const t = (w.fit + w.owner + w.market) || 1; return `${Math.round(w.fit / t * 100)}% fit, ${Math.round(w.owner / t * 100)}% owner, ${Math.round(w.market / t * 100)}% market`; };
+
+  async function loadProfiles(selectId) {
+    const r = await api('/api/profiles');
+    profiles = r.profiles;
+    const want = Number(selectId ?? store.get('paydirt.profile'));
+    profile = profiles.find((p) => p.id === want) ?? profiles[0] ?? { id: null, name: 'Default', config: r.defaults };
+    $('cProfile').innerHTML = profiles.map((p) => `<option value="${p.id}" ${p.id === profile.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+    applyProfile();
+  }
+
+  function applyProfile() {
+    const c = profile.config;
+    store.set('paydirt.profile', String(profile.id ?? ''));
+    $('cMinAc').value = c.acres.min; $('cMaxAc').value = c.acres.max;
+    $('pName').value = profile.name; $('pMinAc').value = c.acres.min; $('pMaxAc').value = c.acres.max;
+    $('pWFit').value = c.weights.fit; $('pWOwner').value = c.weights.owner; $('pWMarket').value = c.weights.market;
+    $('pTarget').value = c.market.target; $('pMaxHide').value = c.maxAcres; $('pHideZoning').checked = c.hideProhibitedZoning;
+    $('pMsg').textContent = '';
+  }
+
+  $('cProfile').onchange = () => {
+    profile = profiles.find((p) => p.id === Number($('cProfile').value)) ?? profile;
+    applyProfile();
+    loadCandidates().catch(showErr);
+  };
+
+  function editedConfig() {
+    const c = structuredClone(profile.config);
+    c.acres = { min: +$('pMinAc').value, max: +$('pMaxAc').value };
+    c.weights = { fit: +$('pWFit').value, owner: +$('pWOwner').value, market: +$('pWMarket').value };
+    c.market = { ...c.market, target: +$('pTarget').value };
+    c.maxAcres = +$('pMaxHide').value;
+    c.hideProhibitedZoning = $('pHideZoning').checked;
+    return c;
+  }
+
+  async function saveProfile(asNew) {
+    const name = $('pName').value.trim() || 'Untitled profile';
+    const body = { id: asNew ? null : profile.id, name: asNew && name === profile.name ? `${name} (copy)` : name, config: editedConfig() };
+    try {
+      const saved = await api('/api/profiles', { method: 'POST', body });
+      await loadProfiles(saved.id);
+      $('pMsg').className = 'msg'; $('pMsg').textContent = asNew ? 'Saved as a new profile.' : 'Saved. List re-ranked.';
+      await loadCandidates();
+    } catch (e) { $('pMsg').className = 'msg err'; $('pMsg').textContent = e.message; }
+  }
+  $('profForm').onsubmit = (e) => { e.preventDefault(); saveProfile(false); };
+  $('pSaveNew').onclick = () => saveProfile(true);
+
   // ---------- Detail ----------
   window.clearCandidate = () => {
     if (candSel) map.setFeatureState({ source: 'cand', id: candSel }, { sel: false });
@@ -96,7 +150,7 @@
     setDrive(null);
     $('detail').hidden = false;
     $('detailBody').innerHTML = '<p class="muted">Loading…</p>';
-    const c = await api(`/api/candidates/${encodeURIComponent(pin)}`);
+    const c = await api(`/api/candidates/${encodeURIComponent(pin)}${profile?.id ? `?profile=${profile.id}` : ''}`);
     if (detailFor !== pin) return;
     map.getSource('cand-sel').setData({ type: 'Feature', geometry: c.geometry, properties: {} });
     if (fly) {
@@ -119,7 +173,7 @@
       <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} <span class="score" style="background:${scoreColor(c.score)}">${c.score}</span></p>
       ${c.excluded ? `<p class="warn">Hidden by default: ${esc(c.excluded)}</p>` : ''}
       <section><h2>Score</h2><div class="bars">${bar('Fit', c.fit_score)}${bar('Owner', c.owner_score)}${bar('Market', c.market_score)}</div>
-        <p class="muted" style="font-size:12px;margin:0">Fit = zoning, size, how built-up. Owner = signs they might sell. Market = $200k+ households within 10 miles. Score = 40% fit, 35% owner, 25% market.</p></section>
+        <p class="muted" style="font-size:12px;margin:0">Fit = zoning, size, how built-up. Owner = signs they might sell. Market = $200k+ households within 10 miles (${Math.round(c.marketTarget / 1000)}k or more = 100). Weights from <b>${esc(profile?.name ?? 'profile')}</b>: ${weightText(c.weights)}.</p></section>
       <section><h2>Zoning for a sports club <span class="pill ${VERDICT_PILL[c.sports_verdict]}">${esc(VERDICT_LABEL[c.sports_verdict])}</span></h2>
         <dl><dt>Zone</dt><dd>${esc(c.zoning || '—')}</dd></dl>
         <p style="margin:0;font-size:13px">${esc(c.sports_note)}</p>
