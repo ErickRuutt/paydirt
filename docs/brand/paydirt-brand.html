@@ -146,6 +146,11 @@ section.sheet { padding-block: 72px; border-bottom: 1px solid var(--line); }
 .rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; font-size: 14px; color: var(--fg-2); }
 .rules div { border-top: 1px solid var(--line); padding-top: 10px; }
 
+.goldfield { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 32px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 28px; }
+.goldfield > img { width: 280px; height: 280px; max-width: 100%; }
+.gf-text { display: grid; gap: 12px; }
+.gf-text .sizes { display: flex; gap: 16px; align-items: flex-end; padding-top: 12px; border-top: 1px solid var(--line); }
+@media (max-width: 820px) { .goldfield { grid-template-columns: 1fr; justify-items: center; } }
 .icons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .icons figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; display: grid; gap: 14px; justify-items: center; align-content: start; }
 .icons figure > img { width: 168px; height: 168px; max-width: 100%; }
@@ -382,13 +387,24 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
 </div></section>
 
 <section class="sheet" id="icon"><div class="wrap">
-  <div class="sheet-head"><span class="lbl">05b · App icon</span><div><h2>Gold in the dirt</h2><p>Three directions from one idea: a found label that reads as an aerial map, with rivers through red earth and gold-foil nuggets. Here the land is brown, the rivers run paper with a canopy-green edge, and the nuggets are ore.</p></div></div>
+  <div class="sheet-head"><span class="lbl">05b · App icon</span><div><h2>Gold in the dirt</h2><p>One lead icon and three earlier directions, all from one idea: a found label that reads as an aerial map, with rivers through red earth and gold-foil nuggets. Here the land is brown, the rivers run paper with a canopy-green edge, and the nuggets are ore.</p></div></div>
+  <div class="goldfield">
+    <img src="icons/goldfield.svg" alt="Goldfield icon: melted acid-colored strata traced by contour lines that close in on a glowing gold find, with a paper river across the top" width="280" height="280">
+    <div class="gf-text">
+      <span class="lbl">Lead direction · Goldfield</span>
+      <h3>The search, in one picture</h3>
+      <p>Out there's melted strata, Digital's contour lines, and no crosshair. The colors cycle wild at the edges, then sink into dark ground, and the contour lines tighten like a summit on a topo map around what we're digging for: gold.</p>
+      <p class="muted" style="font-size:14px">Bands, lines and nuggets are warped together, so every contour follows the melt exactly. Use it for the app icon at 64px and up, the site, and print. Under 32px, switch to Simple.</p>
+      <div class="sizes"><img src="icons/goldfield.svg" alt="" width="128" height="128"><img src="icons/goldfield.svg" alt="" width="64" height="64"><img src="icons/goldfield.svg" alt="" width="32" height="32"><img src="icons/simple.svg" alt="" width="16" height="16"></div>
+    </div>
+  </div>
+  <p class="lbl" style="margin:28px 0 12px">Earlier directions</p>
   <div class="icons">
     <figure><img src="icons/simple.svg" alt="Simple icon: one paper river with a green edge across chocolate ground, gold nuggets below" width="168" height="168"><figcaption><b>Simple</b><span>One river, two grounds, four nuggets. Flat shapes that hold up at 16px. The everyday app icon.</span></figcaption><div class="sizes"><img src="icons/simple.svg" alt="" width="64" height="64"><img src="icons/simple.svg" alt="" width="32" height="32"><img src="icons/simple.svg" alt="" width="16" height="16"></div></figure>
     <figure><img src="icons/digital.svg" alt="Digital icon: survey grid with contour lines, the river as a dashed vector, and a pixel gold nugget under a crosshair" width="168" height="168"><figcaption><b>Digital</b><span>The same map as a GIS screen: survey grid, contour bands, the river as a vector, a pixel nugget under the crosshair. For the dark theme and the product site.</span></figcaption><div class="sizes"><img src="icons/digital.svg" alt="" width="64" height="64"><img src="icons/digital.svg" alt="" width="32" height="32"><img src="icons/digital.svg" alt="" width="16" height="16"></div></figure>
     <figure><img src="icons/acid.svg" alt="Acid icon: the map melts into marbled bands of every brand color, with gold drops" width="168" height="168"><figcaption><b>Out there</b><span>What the map looks like to Jerry Garcia at a Shoreline show: every brand color melting through the strata, the river running red-hot, gold dripping out of the ground. Merch, stickers, the launch poster.</span></figcaption><div class="sizes"><img src="icons/acid.svg" alt="" width="64" height="64"><img src="icons/acid.svg" alt="" width="32" height="32"><img src="icons/acid.svg" alt="" width="16" height="16"></div></figure>
   </div>
-  <p class="muted body-col" style="margin-top:18px;font-size:14px">Recommendation: Simple as the app and browser icon, Digital as the dark-theme and site variant, Out there for anything printed or worn. All three keep the core-sample mark's logic: green on top, gold in the ground.</p>
+  <p class="muted body-col" style="margin-top:18px;font-size:14px">Recommendation: Goldfield as the app icon and on the site; Simple wherever it has to work at 16px (browser tab, favicon). Every version keeps the core-sample logic: green on top, gold in the ground.</p>
 </div></section>
 
 <section class="sheet" id="voice"><div class="wrap">
