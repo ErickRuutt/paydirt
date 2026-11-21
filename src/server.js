@@ -9,7 +9,7 @@ import { reachFor, reachWithin, blockGroupsGeoJSON, hasDemographics } from './de
 import { getIsochrones, contoursByMinutes, pointInGeometry, hasMapbox } from './isochrone.js';
 import { KEY_FIELDS } from './candidates.js';
 import { listProjects, getProject, createProject, updateProject, projectHistory, reviewParcel, projectCandidates, projectCandidate, REVIEW_STATUSES } from './projects.js';
-import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS } from './spec.js';
+import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS, TAG_LABELS } from './spec.js';
 import { draftFromText, interviewTurn, hasClaude } from './compiler.js';
 
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
@@ -68,7 +68,7 @@ const projectOr404 = async (id) => {
 };
 app.get('/api/projects', wrap(async (req, res) => res.json({
   projects: await listProjects(),
-  catalog: { requirements: REQUIREMENT_FIELDS, preferences: PREFERENCE_FIELDS, signals: SIGNAL_LABELS },
+  catalog: { requirements: REQUIREMENT_FIELDS, preferences: PREFERENCE_FIELDS, signals: SIGNAL_LABELS, tags: TAG_LABELS },
 })));
 const SOURCES = new Set(['form', 'markdown', 'interview']);
 const sourceOf = (b) => (SOURCES.has(b?.source) ? b.source : 'form');

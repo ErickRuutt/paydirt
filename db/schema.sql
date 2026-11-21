@@ -219,3 +219,9 @@ CREATE TABLE IF NOT EXISTS project_members (
 -- Search profiles and global reviews were replaced by projects (Nov 21, 2026).
 DROP TABLE IF EXISTS profiles;
 DROP TABLE IF EXISTS candidate_reviews;
+
+-- Added Nov 21, 2026: what's operating on a parcel and who owns it (shared facts every project can filter on).
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS tags TEXT;          -- JSON array, see TAG_LABELS in src/spec.js
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS businesses TEXT;    -- JSON [{label, kind, status, note}] from OpenStreetMap
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS owner_type TEXT;    -- individual / trust / llc / company / government
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS mail_attn TEXT;     -- attention line on the tax bill

@@ -1,7 +1,7 @@
 /* One score color scale for everything: list chips, map dots, legend and score bars.
-   A continuous ramp from bare ground (sand) through ore to deep fir, so a 72 is the same color everywhere. */
+   A standard red → yellow → green ramp (bad fit → good fit), so a 72 is the same color everywhere. */
 (() => {
-  const STOPS = [[0, '#D8CDB8'], [35, '#CDB98F'], [50, '#B8902A'], [65, '#5E8A45'], [78, '#2E7A50'], [100, '#1F4D36']];
+  const STOPS = [[0, '#C0392B'], [30, '#E0662A'], [50, '#E9B330'], [65, '#A7C04A'], [80, '#4FA65B'], [100, '#1E8449']];
   const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const toHex = (rgb) => '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
 
@@ -20,7 +20,7 @@
   function scoreInk(score) {
     const [r, g, b] = hex(scoreColor(score)).map((v) => v / 255);
     const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    return lum > 0.42 ? '#2B1D14' : '#F3EDE2';
+    return lum > 0.5 ? '#2B1D14' : '#FFFFFF';
   }
   // The same ramp as a MapLibre expression and a CSS gradient.
   const mapExpr = (prop = 'score') => ['interpolate', ['linear'], ['get', prop], ...STOPS.flat()];

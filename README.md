@@ -54,6 +54,7 @@ requiring zoning that allows (or hasn't ruled out) a sports facility and 5–80 
 Rebuild (after refreshing the raw files in `data/raw/`):
 ```
 npm run fetch:gis            # King County GIS parcels 5+ acres -> data/raw/gis-parcels.json
+npm run fetch:osm            # named businesses from OpenStreetMap -> data/raw/osm-pois.json
 npm run import:candidates    # needs account/EXTR_RPAcct_NoName.csv and parcel/EXTR_Parcel.csv
 ```
 Reviews (status, notes) are kept per project in `project_reviews` and survive rebuilds.
@@ -64,3 +65,15 @@ Reviews (status, notes) are kept per project in `project_reviews` and survive re
 - **Urban growth line**: King County's Urban Growth Area boundary; the rural side is tinted green.
 
 Both are public King County GIS boundaries saved as static files in `public/data/`. Refresh with `npm run fetch:boundaries`.
+
+## Site tags (what's on the land)
+
+Each candidate carries shared facts every project can filter on: vacant land, operating business, major anchor tenant,
+leased to a business, company-owned, closing or bankrupt tenant, possible empty building, tax bill paid by a business.
+They come from the assessor's use code, building value per acre, owner type (from sales-record buyer names), the tax bill's
+mailing address, and businesses mapped in OpenStreetMap inside the parcel. Anchor and closing-chain lists live in
+`src/tenants.js` (reviewed Nov 2026; the closing list goes stale and should be fed by news later).
+
+Projects decide what the tags mean: `tags_exclude` / `tags_include` requirements, and the `business_on_site` preference,
+which ranks operating sites lower and caps their score (Field House v2: capped at 40; closing tenants and possible empty
+buildings keep partial credit).

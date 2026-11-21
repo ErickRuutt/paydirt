@@ -6,6 +6,20 @@
 export const SPEC_VERSION = 1;
 
 const VERDICTS = ['permitted', 'conditional', 'unknown', 'prohibited'];
+
+// Site tags: shared facts about what's on a parcel (scripts/import-candidates.js). Every project can filter on them.
+export const TAG_LABELS = {
+  'vacant-land': 'Vacant land',
+  'operating-business': 'Operating business',
+  'anchor-tenant': 'Major anchor tenant',
+  'leased-to-business': 'Leased to a business',
+  'company-owned': 'Owned by a company',
+  'closing-tenant': 'Closing or bankrupt tenant',
+  'possible-empty-building': 'Possible empty building',
+  'tax-bill-to-business': 'Tax bill goes to a business',
+};
+const tagSql = (t) => `c.tags LIKE '%"${t.replace(/[^a-z-]/g, '')}"%'`;
+
 const SIGNALS = {
   held_30y: { label: 'Held 30+ years', sql: 'c.years_held >= 30' },
   held_20y: { label: 'Held 20–30 years', sql: 'c.years_held >= 20 AND c.years_held < 30' },
@@ -29,6 +43,8 @@ export const REQUIREMENT_FIELDS = {
   land_value_per_acre: { label: 'Assessed land value per acre', type: 'max' },
   vacant: { label: 'Vacant land only', type: 'bool' },
   owner_signals: { label: 'Owner shows any of these signals', type: 'set', options: Object.keys(SIGNALS) },
+  tags_exclude: { label: 'Hide sites tagged', type: 'set', options: Object.keys(TAG_LABELS) },
+  tags_include: { label: 'Only sites tagged', type: 'set', options: Object.keys(TAG_LABELS) },
 };
 
 // Preferences each produce a 0–100 sub-score; the project score is their weighted average.
@@ -39,6 +55,9 @@ export const PREFERENCE_FIELDS = {
   owner_signals: { label: 'Owner likely to sell', params: { points: { held_30y: 35, held_20y: 25, no_market_sale: 25, recently_inherited: 30, inherited: 20, family_trust: 15, bought_recently: -25, out_of_state: 15, absentee: 10, mostly_land: 15 } } },
   hh200k_10mi: { label: '$200k+ households within 10 mi', params: { target: 60000 } },
   land_value_per_acre: { label: 'Lower land value per acre', params: { target: 300000 } },
+  // Sites with a business running on them rank lower; an operating site can never score above `cap`.
+  // Closing tenants and possibly empty buildings get partial credit (the redevelopment opportunity).
+  business_on_site: { label: 'No business operating on site', params: { anchor: 0, operating: 15, closing: 65, emptyBuilding: 70, none: 100, cap: 40 } },
 };
 
 export const SIGNAL_LABELS = Object.fromEntries(Object.entries(SIGNALS).map(([k, v]) => [k, v.label]));
@@ -139,12 +158,15 @@ export function compileSpec(spec) {
       case 'land_value_per_acre': where.push(`(c.land_value / NULLIF(c.acres, 0)) <= ${wp(r.value)}`); break;
       case 'vacant': where.push("c.present_use ILIKE 'vacant%'"); break;
       case 'owner_signals': where.push(`(${r.value.map((k) => SIGNALS[k].sql).join(' OR ')})`); break;
+      case 'tags_exclude': where.push(`NOT (${r.value.map(tagSql).join(' OR ')})`); break;
+      case 'tags_include': where.push(`(${r.value.map(tagSql).join(' OR ')})`); break;
     }
   }
 
   const scoreParams = [];
   const sp = (v) => { scoreParams.push(v); return `${'?'}::float`; };
   const subs = [];
+  let capWhenOperating = null;
   const clamp = (e) => `GREATEST(0, LEAST(100, ${e}))`;
   for (const [i, p] of spec.preferences.entries()) {
     const key = `s${i}`;
@@ -167,6 +189,12 @@ export function compileSpec(spec) {
       case 'hh200k_10mi':
         e = `COALESCE(c.hh200k_10mi, 0)::float / ${sp(p.params.target || 1)} * 100`;
         break;
+      case 'business_on_site': {
+        const q = p.params;
+        e = `CASE WHEN ${tagSql('closing-tenant')} THEN ${sp(q.closing)} WHEN ${tagSql('anchor-tenant')} THEN ${sp(q.anchor)} WHEN ${tagSql('operating-business')} THEN ${sp(q.operating)} WHEN ${tagSql('possible-empty-building')} THEN ${sp(q.emptyBuilding)} ELSE ${sp(q.none)} END`;
+        capWhenOperating = q.cap;
+        break;
+      }
       case 'land_value_per_acre':
         // 100 at or below target, falling to 0 at twice the target.
         e = `CASE WHEN c.land_value IS NULL OR c.acres = 0 THEN 50 ELSE 200 - (c.land_value / c.acres) / ${sp(p.params.target || 1)} * 100 END`;
@@ -175,7 +203,9 @@ export function compileSpec(spec) {
     subs.push({ key, field: p.field, label: PREFERENCE_FIELDS[p.field].label, weight: p.weight, sql: `ROUND(${clamp(`COALESCE(${e}, 0)`)})::int AS ${key}` });
   }
   const totalW = subs.reduce((a, s) => a + s.weight, 0) || 1;
-  const scoreExpr = subs.length ? subs.map((s) => `${s.key} * ${s.weight / totalW}`).join(' + ') : '0';
+  let scoreExpr = subs.length ? subs.map((s) => `${s.key} * ${s.weight / totalW}`).join(' + ') : '0';
+  // Cap: a site with a business running on it (and no sign it's closing) never ranks above the cap.
+  if (capWhenOperating != null) scoreExpr = `LEAST(${scoreExpr}, CASE WHEN tags LIKE '%"operating-business"%' AND tags NOT LIKE '%"closing-tenant"%' THEN ${Number(capWhenOperating)} ELSE 100 END)`;
   return {
     where, whereParams,
     scoreSelect: subs.map((s) => s.sql).join(', ') || '0 AS s_none',
@@ -199,6 +229,8 @@ export function failedRequirements(spec, c) {
       case 'land_value_per_acre': ok = c.acres ? c.land_value / c.acres <= r.value : false; break;
       case 'vacant': ok = /^vacant/i.test(c.present_use ?? ''); break;
       case 'owner_signals': ok = true; break; // checked in SQL; rarely the reason someone opens a parcel
+      case 'tags_exclude': ok = !r.value.some((t) => (c.tags ?? '').includes(`"${t}"`)); break;
+      case 'tags_include': ok = r.value.some((t) => (c.tags ?? '').includes(`"${t}"`)); break;
     }
     if (!ok) out.push(`${REQUIREMENT_FIELDS[r.field].label}${r.why ? ` — ${r.why}` : ''}`);
   }

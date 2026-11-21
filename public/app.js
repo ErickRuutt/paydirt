@@ -327,3 +327,17 @@ loadConfig().catch((e) => { $('searchMsg').className = 'msg err'; $('searchMsg')
   apply(saved);
   for (const b of btns) b.onclick = () => apply(b.dataset.themeSet);
 })();
+
+// ---------- Side panel: minimize keeps your place; Close or Esc closes ----------
+(() => {
+  const panel = $('detail'), btn = $('minDetail');
+  const setMin = (min) => {
+    panel.classList.toggle('min', min);
+    btn.textContent = min ? 'Expand' : 'Minimize';
+    btn.setAttribute('aria-expanded', String(!min));
+  };
+  btn.onclick = () => setMin(!panel.classList.contains('min'));
+  // Opening a parcel always shows it expanded.
+  new MutationObserver(() => { if (!panel.hidden) setMin(false); }).observe($('detailBody'), { childList: true });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden && !e.target.closest?.('input, textarea, select')) $('closeDetail').click(); });
+})();

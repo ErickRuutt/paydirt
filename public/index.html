@@ -62,6 +62,7 @@
         <label>Owner signal
           <select id="cSignal"><option value="">Any</option><option value="held">Held 20+ years</option><option value="inherit">Inherited</option><option value="family or trust">Family or trust transfer</option><option value="no market sale">No market sale on record</option><option value="out of state">Owner out of state</option><option value="mostly land">Little or no building</option></select></label>
       </div>
+      <label>What's on the site <select id="cSite"><option value="">Anything</option><option value="vacant-land">Vacant land only</option><option value="-operating-business">Hide operating businesses</option><option value="closing-tenant">Closing or bankrupt tenant</option><option value="possible-empty-building">Possible empty building</option><option value="leased-to-business">Leased to a business</option><option value="anchor-tenant">Major anchor tenant</option></select></label>
       <label>Review status <select id="cStatus"><option value="">Any</option><option value="shortlist">Shortlist</option><option value="contacted">Contacted</option><option value="rejected">Rejected</option></select></label>
     </form>
     <section>
@@ -130,8 +131,14 @@
   <span id="affMissing" hidden class="muted">Shapes only: add CENSUS_API_KEY for income</span>
 </div>
 
-<aside id="detail" hidden>
-  <button id="closeDetail" class="close" aria-label="Close">×</button>
+<aside id="detail" hidden aria-label="Parcel details">
+  <div class="detailBar">
+    <span id="detailBarTitle" class="lblish">Parcel details</span>
+    <div class="detailBtns">
+      <button id="minDetail" type="button" class="ghost" aria-expanded="true" title="Minimize (keeps your place)">Minimize</button>
+      <button id="closeDetail" type="button" class="ghost" title="Close (Esc)">Close <span aria-hidden="true">✕</span></button>
+    </div>
+  </div>
   <div id="detailBody"></div>
 </aside>
 

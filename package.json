@@ -12,7 +12,8 @@
     "import:census": "node --env-file-if-exists=.env scripts/import-census.js",
     "fetch:gis": "node scripts/fetch-gis-parcels.js",
     "import:candidates": "node --env-file-if-exists=.env scripts/import-candidates.js",
-    "fetch:boundaries": "node scripts/fetch-boundaries.js"
+    "fetch:boundaries": "node scripts/fetch-boundaries.js",
+    "fetch:osm": "node scripts/fetch-osm-pois.js"
   },
   "engines": {
     "node": ">=20.9"

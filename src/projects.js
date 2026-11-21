@@ -67,7 +67,7 @@ export async function reviewParcel(projectId, pin, { status, notes }, userId) {
 
 // ---------- Candidates scored for a project ----------
 const LIST_COLS = `c.pin, c.address, c.city, c.postal_city, c.acres, c.zoning, c.sports_verdict, c.present_use,
-  c.years_held, c.signals, c.hh200k_10mi, c.share200k_10mi, c.land_value, c.lat, c.lng`;
+  c.years_held, c.signals, c.hh200k_10mi, c.share200k_10mi, c.land_value, c.lat, c.lng, c.tags, c.businesses, c.owner_type`;
 
 // filters: ad-hoc narrowing from the map/list (not saved to the project).
 export async function projectCandidates(project, filters = {}) {
@@ -81,6 +81,8 @@ export async function projectCandidates(project, filters = {}) {
   if (filters.area) add("(COALESCE(c.city, '') ILIKE ? OR COALESCE(c.postal_city, '') ILIKE ?)", `%${filters.area}%`, `%${filters.area}%`);
   if (filters.signal) add('c.signals ILIKE ?', `%${filters.signal}%`);
   if (filters.status) add("COALESCE(r.status, 'new') = ?", filters.status);
+  if (filters.tag) add('c.tags LIKE ?', `%"${String(filters.tag).replace(/[^a-z-]/g, '')}"%`);
+  if (filters.notTag) add("COALESCE(c.tags, '') NOT LIKE ?", `%"${String(filters.notTag).replace(/[^a-z-]/g, '')}"%`);
 
   const inner = `SELECT ${LIST_COLS}, COALESCE(r.status, 'new') AS status, ${k.scoreSelect}
     FROM candidates c LEFT JOIN project_reviews r ON r.pin = c.pin AND r.project_id = ${Number(project.id)}
@@ -95,9 +97,9 @@ export async function projectCandidates(project, filters = {}) {
     type: 'FeatureCollection', total,
     project: { id: project.id, name: project.name, version: project.spec_version },
     subscores: k.subscores,
-    features: rows.filter((r) => r.lat != null).map(({ lat, lng, signals, ...p }) => ({
+    features: rows.filter((r) => r.lat != null).map(({ lat, lng, signals, tags, businesses, ...p }) => ({
       type: 'Feature', id: p.pin, geometry: { type: 'Point', coordinates: [lng, lat] },
-      properties: { ...p, signals: JSON.parse(signals ?? '[]') },
+      properties: { ...p, signals: JSON.parse(signals ?? '[]'), tags: JSON.parse(tags ?? '[]'), businessCount: JSON.parse(businesses ?? '[]').length },
     })),
   };
 }
@@ -112,6 +114,7 @@ export async function projectCandidate(project, pin) {
   const fails = failedRequirements(project.spec, c);
   return {
     ...c, geometry: JSON.parse(c.geometry_json), geometry_json: undefined, signals: JSON.parse(c.signals ?? '[]'),
+    tags: JSON.parse(c.tags ?? '[]'), businesses: JSON.parse(c.businesses ?? '[]'),
     subscores: k.subscores.map((s) => ({ ...s, value: c[s.key] })),
     hiddenBecause: c.excluded ? [c.excluded] : fails,
   };

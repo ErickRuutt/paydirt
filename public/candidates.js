@@ -9,6 +9,25 @@
   const VERDICT_LABEL = { permitted: 'Permitted', conditional: 'Conditional use', prohibited: 'Not allowed', unknown: 'Unknown' };
   const VERDICT_PILL = { permitted: 'pass', conditional: 'review', prohibited: 'fail', unknown: 'unknown' };
   const { chip: scoreChip, mapExpr: scoreMapExpr, scoreColor } = window.paydirtScore; // one ramp: chips, dots, legend, bars
+  const fmtPin = (pin) => `${String(pin).slice(0, 6)}-${String(pin).slice(6)}`;
+  const siteTitle = (p) => p.address || `Parcel ${fmtPin(p.pin)}`;
+  // The facts a scanner needs, as at most three short labels: zoning, what's on the site, the owner.
+  const SITE_PILL = [['closing-tenant', 'review', 'Closing tenant'], ['anchor-tenant', 'fail', 'Anchor tenant'], ['operating-business', 'fail', 'Business on site'],
+    ['possible-empty-building', 'review', 'Empty building?'], ['vacant-land', 'pass', 'Vacant']];
+  function rowFacts(p) {
+    const out = [`<span class="pill ${VERDICT_PILL[p.sports_verdict]}">${esc(VERDICT_SHORT[p.sports_verdict] ?? p.sports_verdict)}</span>`];
+    const site = SITE_PILL.find(([t]) => p.tags?.includes(t));
+    if (site) out.push(`<span class="pill ${site[1]}">${site[2]}</span>`);
+    const sig = p.signals.find((s) => /inherit/.test(s)) ? 'Inherited' : p.years_held >= 20 ? `Held ${Math.floor(p.years_held)}y` : p.signals.find((s) => /no market sale/.test(s)) ? 'No sale on record' : null;
+    if (sig) out.push(`<span class="pill">${sig}</span>`);
+    if (p.status !== 'new') out.push(`<span class="pill ${p.status}">${esc(p.status)}</span>`);
+    return out.join('');
+  }
+  const TAG_TEXT = { 'vacant-land': 'Vacant land', 'operating-business': 'Business operating', 'anchor-tenant': 'Major anchor tenant', 'leased-to-business': 'Leased to a business',
+    'company-owned': 'Company-owned', 'closing-tenant': 'Closing tenant', 'possible-empty-building': 'Possible empty building', 'tax-bill-to-business': 'Tax bill paid by a business' };
+  const TAG_TONE = { 'vacant-land': 'pass', 'operating-business': 'fail', 'anchor-tenant': 'fail', 'leased-to-business': 'fail', 'closing-tenant': 'review', 'possible-empty-building': 'review' };
+  const OWNER_TEXT = { individual: 'Individual', trust: 'Family trust or estate', llc: 'LLC', company: 'Company', government: 'Government' };
+  const VERDICT_SHORT = { permitted: 'Permitted', conditional: 'Conditional', prohibited: 'Not allowed', unknown: 'Zoning unknown' };
   const where = (p) => p.city ? titleCase(p.city) : `Unincorporated${p.postal_city ? ' · ' + titleCase(p.postal_city) : ''}`;
   const titleCase = (s) => String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -53,6 +72,7 @@
     set('minAcres', $('cMinAc').value); set('maxAcres', $('cMaxAc').value);
     set('verdict', $('cVerdict').value); set('minScore', +$('cMinScore').value || '');
     set('area', $('cArea').value.trim()); set('signal', $('cSignal').value); set('status', $('cStatus').value);
+    const site = $('cSite').value; if (site.startsWith('-')) set('notTag', site.slice(1)); else set('tag', site);
     const key = q.toString();
     pending = key;
     $('cCount').textContent = '(loading…)';
@@ -71,11 +91,13 @@
     const shown = cand.features.slice(0, 150);
     $('cCount').textContent = `(${cand.total.toLocaleString()}${cand.total > shown.length ? `, top ${shown.length} listed` : ''})`;
     $('cList').innerHTML = shown.map(({ properties: p }) => `
-      <li data-pin="${esc(p.pin)}" class="${p.pin === candSel ? 'sel' : ''}">
-        <span class="t">${esc(p.address || 'No site address')} <span class="muted" style="font-weight:400">· ${esc(where(p))}</span></span>
+      <li data-pin="${esc(p.pin)}" class="row ${p.pin === candSel ? 'sel' : ''}">
         ${scoreChip(p.score)}
-        <span class="m">${fmt.ac(p.acres)} · ${esc(p.zoning || 'no zone')} (${esc(VERDICT_LABEL[p.sports_verdict] ?? p.sports_verdict)})${p.years_held != null ? ` · held ${Math.floor(p.years_held)}y` : ''}${p.hh200k_10mi != null ? ` · ${Math.round(p.hh200k_10mi / 1000)}k $200k+ hh in 10 mi` : ''}${p.status !== 'new' ? ` · <b>${esc(p.status)}</b>` : ''}</span>
-        ${p.signals.slice(0, 3).map((s) => `<span class="chip">${esc(s)}</span>`).join('')}
+        <div class="rowMain">
+          <span class="t">${esc(siteTitle(p))}</span>
+          <span class="m">${fmt.ac(p.acres)} · ${esc(p.zoning || 'No zone')} · ${esc(where(p))}</span>
+          <span class="facts">${rowFacts(p)}</span>
+        </div>
       </li>`).join('') || '<li class="muted">No candidates match these filters.</li>';
     window.paydirtTaper.apply($('cList'));
   }
@@ -251,6 +273,11 @@
       ${c.hiddenBecause.length ? `<p class="warn" data-taper="2">Not in this project's results: ${c.hiddenBecause.map(esc).join('; ')}</p>` : ''}
       <section><h2>Score for ${esc(project.name)}</h2><div class="bars">${c.subscores.map((s) => bar(`${esc(s.label)} <span class="muted">${Math.round(s.share * 100)}%</span>`, s.value)).join('')}</div>
         <p class="muted" style="font-size:12px;margin:0">Each line is 0–100; the percentage is its weight in this project's score (version ${project.spec_version}).</p></section>
+      <section><h2>On this site</h2>
+        <div class="tagRow">${(c.tags ?? []).map((t) => `<span class="pill ${TAG_TONE[t] ?? ''}">${esc(TAG_TEXT[t] ?? t)}</span>`).join('') || '<span class="muted">No site tags.</span>'}</div>
+        <dl><dt>Owner type</dt><dd>${esc(OWNER_TEXT[c.owner_type] ?? 'Unknown')}</dd><dt>Building value</dt><dd>${c.impr_value != null && c.acres ? `${fmt.usd(c.impr_value / c.acres)} per acre` : '—'}</dd></dl>
+        ${c.businesses.length ? `<div class="biz" data-taper="7"><span class="lbl">Businesses here (${c.businesses.length}, from OpenStreetMap)</span>${c.businesses.map((b) => `<div class="bizRow"><span><b>${esc(b.label)}</b> <span class="muted">${esc(b.kind ?? '')}</span>${b.note ? `<br><span class="muted" style="font-size:12px">${esc(b.note)}</span>` : ''}</span><span class="pill ${b.status === 'closing' ? 'review' : b.status === 'anchor' ? 'fail' : ''}">${b.status === 'anchor' ? 'Anchor' : b.status === 'closing' ? 'Closing' : 'Open'}</span></div>`).join('')}</div>` : '<p class="muted" style="margin:0;font-size:13px">No businesses mapped on this parcel.</p>'}
+      </section>
       <section><h2>Zoning for a sports club <span class="pill ${VERDICT_PILL[c.sports_verdict]}">${esc(VERDICT_LABEL[c.sports_verdict])}</span></h2>
         <dl><dt>Zone</dt><dd>${esc(c.zoning || '—')}</dd></dl>
         <p style="margin:0;font-size:13px" data-taper="3">${esc(c.sports_note)}</p>
@@ -276,6 +303,7 @@
         <button id="cRevSave" class="secondary" type="button">Save review</button><p id="cRevMsg" class="msg"></p></section>`;
 
     window.paydirtTaper.apply($('detailBody'));
+    $('detailBarTitle').textContent = `${siteTitle(c)} · ${c.score}`;
     if (c.enrichment) showKeyFields(c.enrichment.fields, c.keyFields, c.enrichment.created_at);
     $('cEnrichBtn').onclick = async () => {
       $('cEnrichBtn').disabled = true; $('cEnrichMsg').className = 'msg'; $('cEnrichMsg').textContent = 'Checking…';

@@ -99,10 +99,8 @@ table.hist th { color: var(--muted); font-weight: 500; }
 table.hist td:first-child { white-space: nowrap; }
 table.hist td.n { text-align: right; white-space: nowrap; }
 .sw.pass { background: var(--score-4); } .sw.review { background: var(--score-2); } .sw.fail { background: var(--survey-red); }
-#detail { position: absolute; top: 10px; right: 10px; bottom: 10px; width: 380px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; overflow-y: auto; padding: 18px; box-shadow: 0 6px 20px var(--shadow); }
-.close { position: absolute; top: 8px; right: 8px; background: none; border: none; color: var(--muted); font-size: 22px; padding: 2px 8px; }
-.close:hover:not(:disabled) { background: none; color: var(--fg); }
-#detail h3 { margin: 0 24px 4px 0; font-size: 18px; }
+#detail { position: absolute; top: 10px; right: 10px; bottom: 10px; width: 380px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; overflow-y: auto; padding: 0 18px 18px; box-shadow: 0 6px 20px var(--shadow); }
+#detail h3 { margin: 14px 0 4px; font-size: 20px; }
 #detail section { margin-top: 18px; display: flex; flex-direction: column; gap: 6px; }
 dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
 dt { color: var(--faint); font-family: var(--mono); font-size: 11px; letter-spacing: .03em; text-transform: uppercase; padding-top: 2px; } dd { margin: 0; overflow-wrap: anywhere; }
@@ -196,3 +194,29 @@ ol.hist { margin: 6px 0 0; padding-left: 18px; font-size: 12px; display: flex; f
 .taperToggle, .taperToggle:hover:not(:disabled) { align-self: flex-start; background: none; border: 0; padding: 2px 0; color: var(--link); font: 500 12px var(--body); text-decoration: underline; text-underline-offset: 2px; }
 .taperToggle:active:not(:disabled) { transform: none; }
 @media (prefers-reduced-motion: reduce) { .taper.tapered { transition: none; } }
+
+/* Side panel header: always visible, says how to get out */
+.detailBar { position: sticky; top: 0; z-index: 2; margin: 0 -18px; padding: 8px 10px 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.lblish { font: 500 11px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.detailBtns { display: flex; gap: 6px; flex: none; }
+button.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line-strong); font-size: 12px; padding: 5px 10px; }
+button.ghost:hover:not(:disabled) { background: var(--tag-bg); border-color: var(--line-strong); }
+#detail.min { bottom: auto; overflow: hidden; }
+#detail.min #detailBody { display: none; }
+#detail.min .detailBar { border-bottom: 0; }
+#detail.min .lblish { color: var(--fg); }
+
+/* List rows: score first, then name, the basics, and up to three labels */
+.list li.row { grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; }
+.list li.row > .score { font-size: 15px; min-width: 40px; padding: 6px 6px; margin-top: 1px; }
+.rowMain { display: grid; gap: 2px; min-width: 0; }
+.rowMain .m { grid-column: auto; }
+.facts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.facts .pill { font-size: 11px; }
+.tagRow { display: flex; flex-wrap: wrap; gap: 4px; }
+.biz { display: grid; gap: 6px; }
+.bizRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; font-size: 13px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.bizRow .pill { text-transform: none; }
+.lbl { font: 500 11px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+#detail { z-index: 5; }
+.facts .pill, .tagRow .pill { text-transform: none; }
