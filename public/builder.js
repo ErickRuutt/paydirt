@@ -92,15 +92,14 @@
   async function showDraft(el, d, reviseProject) {
     lastDraft = d;
     const { catalog } = await api('/api/projects');
-    const total = d.spec.preferences.reduce((a, p) => a + p.weight, 0) || 1;
     el.innerHTML = `
       <div class="draft">
         <strong>${esc(d.name)}</strong>
         <p style="margin:0" data-taper="3">${esc(d.summary)}</p>
-        <h2 style="margin:4px 0 0">Requirements</h2>
+        <h2 style="margin:4px 0 0">Must have</h2>
         <ul>${d.spec.requirements.map((r) => `<li><b>${esc(catalog.requirements[r.field].label)}:</b> ${esc(valueText(r, catalog))}${why(r.why)}</li>`).join('') || '<li class="muted">None</li>'}</ul>
-        <h2 style="margin:4px 0 0">Preferences</h2>
-        <ul>${d.spec.preferences.map((p) => `<li><b>${esc(catalog.preferences[p.field].label)}</b> — ${Math.round(p.weight / total * 100)}%${why(p.why)}</li>`).join('')}</ul>
+        <h2 style="margin:4px 0 0">Nice to have</h2>
+        <ul>${d.spec.preferences.map((p) => `<li><b>${esc(catalog.preferences[p.field].label)}</b>${why(p.why)}</li>`).join('')}</ul>
         ${d.questions.length ? `<h2 style="margin:4px 0 0">Questions</h2><ul>${d.questions.map((q) => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
         ${d.unsupported.length ? `<h2 style="margin:4px 0 0">Not applied yet</h2><p class="muted" style="margin:0;font-size:12px">Paydirt can't filter on these yet:</p><ul>${d.unsupported.map((q) => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
         ${d.errors.length ? `<p class="warn">${d.errors.map(esc).join(' ')}</p>` : ''}
@@ -109,7 +108,7 @@
           ${reviseProject ? `<button id="dRevise" type="button">Save as new version of “${esc(reviseProject.name)}”</button>` : ''}
           <button id="dCreate" type="button" class="${reviseProject ? 'secondary' : ''}">Create new project</button>
         </div>
-        <p class="muted" style="margin:0;font-size:12px">You can fine-tune any of this afterwards in Project settings.</p>
+        <p class="muted" style="margin:0;font-size:12px">You can change any of this afterwards from the criteria bar above the map.</p>
         <p id="dMsg" class="msg"></p>
       </div>`;
     window.paydirtTaper.apply(el);

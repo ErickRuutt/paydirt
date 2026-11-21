@@ -612,3 +612,67 @@ body.map #map { margin-top: var(--mapbar); height: calc(100vh - var(--mapbar)); 
 @media (max-width: 1180px) { .mapBar { flex-wrap: wrap; height: auto; padding: 8px 12px; } body.map #map { margin-top: 0; } .mapBar { position: static; grid-column: 3; } }
 #layers.popBody { gap: 4px; }
 #layers.popBody label { min-height: 32px; }
+
+/* ---------- Criteria bar and chip editor (map) ---------- */
+.mapBar.critBar { left: var(--nav); height: auto; min-height: var(--mapbar); flex-direction: column; align-items: stretch; gap: 0; padding: 0; background: var(--bg); border-bottom: 2px solid var(--fg); }
+.critRow { display: flex; align-items: center; gap: 16px; padding: 8px 16px; min-height: 52px; }
+.critName { margin: 0; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 26px/1.1 var(--display); letter-spacing: -.05em; }
+.critSearch { flex: 1 1 200px; max-width: 420px; display: flex; }
+.critSearch .mapSearch { width: 100%; border: 0; border-radius: 0; background: var(--tag-bg); }
+.critSaved { margin: 0 0 0 auto; white-space: nowrap; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.critSaved b { color: var(--fg); }
+.linkish, .linkish:hover:not(:disabled) { padding: 0; border: 0; border-radius: 0; background: none; color: var(--link); font: inherit; letter-spacing: inherit; text-transform: inherit; text-decoration: underline; }
+.linkish:disabled { color: var(--faint); text-decoration: none; cursor: default; }
+.critChips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 16px; background: var(--surface); }
+.critGrp { margin-left: 10px; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.critGrp:first-child { margin-left: 0; }
+.cchip, .cchip:hover:not(:disabled) { min-height: 34px; display: inline-flex; flex-direction: column; justify-content: center; padding: 4px 12px; border: 0; border-radius: 0; font: 600 13.5px/1.2 var(--display); text-align: left; }
+.cchip small { font-weight: 500; font-size: 12px; opacity: .8; }
+.cchip .lvl { font: 500 10.5px var(--mono); text-transform: uppercase; color: var(--accent); }
+.cchip.must, .cchip.must:hover:not(:disabled) { background: var(--fg); color: var(--bg); }
+.cchip.nice, .cchip.nice:hover:not(:disabled) { background: var(--bg); color: var(--fg); box-shadow: inset 0 -3px 0 var(--accent); }
+.cchip.unset, .cchip.unset:hover:not(:disabled) { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-strong); font-weight: 500; }
+.cchip.pending, .cchip.pending:hover:not(:disabled) { background: transparent; color: var(--faint); box-shadow: inset 0 0 0 1px var(--line); font-weight: 500; }
+.cchip.add, .cchip.add:hover:not(:disabled) { background: transparent; color: var(--link); font-weight: 700; }
+.cchip:hover:not(:disabled) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.critAddMenu { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.critAddMenu[hidden] { display: none; }
+@media (min-width: 1181px) { body.map #panel { margin-top: var(--mapbar); height: calc(100vh - var(--mapbar)); } }
+@media (max-width: 1180px) { .mapBar.critBar { min-height: 0; } .critRow { flex-wrap: wrap; } .critName { max-width: 100%; } }
+
+.critDlg { width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 26px 28px; border: 0; border-radius: 0; background: var(--surface); color: var(--fg); box-shadow: 0 0 0 2px var(--fg); }
+.critDlg::backdrop { background: rgba(23, 17, 12, .4); }
+.critDlg .critTitle { margin: 0 0 16px; font: 800 30px/1 var(--display); letter-spacing: -.05em; text-transform: none; color: var(--fg); }
+.critForm { display: grid; gap: 16px; }
+.critDlg fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 8px; }
+.critDlg fieldset:disabled { opacity: .45; }
+.critDlg legend { padding: 0 0 8px; font: 700 15px var(--display); }
+.critDlg .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.critNums { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; }
+.critNums input { width: 110px; border: 0; border-radius: 0; background: var(--tag-bg); font: 800 22px var(--display); text-align: right; }
+.critBest input { width: 80px; font-size: 16px; }
+.critPresets { display: flex; flex-wrap: wrap; gap: 6px; }
+.critPresets button, .critPresets button:hover:not(:disabled) { border: 0; border-radius: 0; background: var(--tag-bg); color: var(--fg); font-weight: 600; }
+.critPresets button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.critChecks { display: grid; gap: 6px; }
+.critDlg .critChecks label, .critDlg .critCheck, .critLevels label { flex-direction: row; align-items: center; gap: 8px; color: var(--fg); font-size: 14px; }
+.critDlg .critField { color: var(--fg); font-size: 14px; }
+.critDlg .critOpt { display: grid; grid-template-columns: 20px 1fr; gap: 10px; padding: 10px 12px; background: var(--bg); color: var(--fg); cursor: pointer; }
+.critOpt:has(input:checked) { background: var(--fg); color: var(--bg); }
+.critOpt b { font: 800 15px var(--display); }
+.critOpt span span { display: block; margin-top: 2px; font-size: 13px; opacity: .8; }
+.critAlso { display: grid; gap: 8px; }
+.critLevels { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 600; }
+.critLevels label { padding: 6px 10px; background: var(--tag-bg); }
+.critLevels label:has(input:checked) { background: var(--accent); color: var(--bedrock); }
+.critAlso[hidden], .critLevels[hidden], .critBest[hidden] { display: none; }
+.critFoot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.critCount { margin-left: auto; display: flex; gap: 10px; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.critCount .warnText { color: var(--bad-fg); }
+.critNotice { margin: 0; padding: 8px 10px; background: var(--warn-bg); color: var(--warn-fg); }
+.critKicker { margin: -8px 0 8px; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.critRead { margin: 0 0 10px; font-size: 14px; }
+.critHist { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; max-height: 60vh; overflow-y: auto; }
+.critHist li { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; background: var(--bg); }
+.critHist small { display: block; color: var(--muted); font-size: 12px; }
+.critVer, .critNow { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
