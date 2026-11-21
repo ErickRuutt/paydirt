@@ -105,3 +105,14 @@ label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--f
 ol.hist { margin: 6px 0 0; padding-left: 18px; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
 
 .bars { grid-template-columns: minmax(0, 1.5fr) 1fr 28px; }
+
+.builder { display: flex; flex-direction: column; gap: 12px; }
+.builder textarea { min-height: 180px; font-size: 13px; }
+.chat { display: flex; flex-direction: column; gap: 8px; max-height: 45vh; overflow-y: auto; }
+.chat .b { padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4; max-width: 92%; white-space: pre-wrap; }
+.chat .b.a { background: #eef3ef; align-self: flex-start; }
+.chat .b.u { background: var(--pine); color: #fff; align-self: flex-end; }
+.draft { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.draft ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.draft .why { color: var(--muted); font-size: 12px; }
+.draft .assumed { color: #8a6d12; }

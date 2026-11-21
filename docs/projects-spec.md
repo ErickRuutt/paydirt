@@ -87,6 +87,6 @@ passing or failing silently.
 ## Build order
 
 1. ~~Projects + spec v1 (requirements vs preferences, project-owned shortlist and notes, history).~~ Done Nov 21, 2026 (`src/spec.js`, `src/projects.js`). Not yet: per-project access (`project_members` is recorded but not enforced), drive-time requirements, slope preferences, multiple uses in zoning.
-2. Markdown + interview compiler (one Claude-backed compiler, approval step, `why` quotes).
+2. ~~Markdown + interview compiler (one Claude-backed compiler, approval step, `why` quotes).~~ Built Nov 21, 2026 (`src/compiler.js`, `public/builder.js`): Claude Opus 5.5 with structured outputs drafts a spec plus questions and "not applied yet" items; a person applies it as a new project or a new version. Calls are logged in `api_calls` and count toward the spend cap.
 3. MCP server over the same API, with keys and metering.
 4. Zoning rules for more uses (restaurant, office) so multi-use projects score correctly.

@@ -10,10 +10,11 @@ import { getIsochrones, contoursByMinutes, pointInGeometry, hasMapbox } from './
 import { KEY_FIELDS } from './candidates.js';
 import { listProjects, getProject, createProject, updateProject, projectHistory, reviewParcel, projectCandidates, projectCandidate, REVIEW_STATUSES } from './projects.js';
 import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS } from './spec.js';
+import { draftFromText, interviewTurn, hasClaude } from './compiler.js';
 
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '1mb' })); // briefs can be long
 app.use(express.static(new URL('../public/', import.meta.url).pathname));
 
 const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((err) => {
@@ -32,7 +33,7 @@ const parcelPoint = (id) => one('SELECT parcelnumb, lat, lng FROM parcels WHERE 
 
 app.get('/api/config', wrap(async (req, res) => {
   res.json({
-    criteria, hasKey: hasKey(), hasDemographics: await hasDemographics(), hasMapbox: hasMapbox(),
+    criteria, hasKey: hasKey(), hasDemographics: await hasDemographics(), hasMapbox: hasMapbox(), hasClaude: hasClaude(),
     spentUsd: await totalSpend(), maxSpendUsd: Number(process.env.MAX_SPEND_USD ?? 2),
   });
 }));
@@ -69,12 +70,21 @@ app.get('/api/projects', wrap(async (req, res) => res.json({
   projects: await listProjects(),
   catalog: { requirements: REQUIREMENT_FIELDS, preferences: PREFERENCE_FIELDS, signals: SIGNAL_LABELS },
 })));
-app.post('/api/projects', wrap(async (req, res) => res.json(await createProject(req.body ?? {}, req.userId))));
+const SOURCES = new Set(['form', 'markdown', 'interview']);
+const sourceOf = (b) => (SOURCES.has(b?.source) ? b.source : 'form');
+app.post('/api/projects', wrap(async (req, res) => res.json(await createProject(req.body ?? {}, req.userId, sourceOf(req.body)))));
 app.get('/api/projects/:id', wrap(async (req, res) => {
   const p = await projectOr404(req.params.id);
   res.json({ ...p, history: await projectHistory(p.id) });
 }));
-app.put('/api/projects/:id', wrap(async (req, res) => res.json(await updateProject(req.params.id, req.body ?? {}, req.userId))));
+app.put('/api/projects/:id', wrap(async (req, res) => res.json(await updateProject(req.params.id, req.body ?? {}, req.userId, sourceOf(req.body)))));
+
+// Drafts: Claude turns a brief or an interview into criteria. Nothing is saved until a person applies it.
+app.post('/api/drafts/from-text', wrap(async (req, res) => {
+  const current = req.body?.projectId ? (await projectOr404(req.body.projectId)).spec : null;
+  res.json(await draftFromText({ text: req.body?.text, current }));
+}));
+app.post('/api/drafts/interview', wrap(async (req, res) => res.json(await interviewTurn({ messages: req.body?.messages }))));
 
 app.get('/api/projects/:id/candidates', wrap(async (req, res) => res.json(await projectCandidates(await projectOr404(req.params.id), req.query))));
 app.get('/api/projects/:id/candidates/:pin', wrap(async (req, res) => {

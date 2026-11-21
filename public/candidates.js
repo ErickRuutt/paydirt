@@ -205,6 +205,9 @@
   $('projForm').onsubmit = (e) => { e.preventDefault(); saveProject(false); };
   $('jSaveNew').onclick = () => saveProject(true);
 
+  // Let the builder (builder.js) reload projects and read the current one.
+  window.paydirtProjects = { reload: async (id) => { await loadProjects(id); await loadCandidates(); }, current: () => project };
+
   // ---------- Detail ----------
   window.clearCandidate = () => {
     if (candSel) map.setFeatureState({ source: 'cand', id: candSel }, { sel: false });
