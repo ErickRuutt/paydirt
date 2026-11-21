@@ -92,3 +92,5 @@ label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--f
 
 .row > label, .row3 > label { min-width: 0; }
 .row input, .row3 input, .row select { width: 100%; min-width: 0; }
+
+#layers { flex-wrap: wrap; max-width: calc(100vw - 400px); }

@@ -52,3 +52,10 @@ npm run fetch:gis            # King County GIS parcels 5+ acres -> data/raw/gis-
 npm run import:candidates    # needs account/EXTR_RPAcct_NoName.csv and parcel/EXTR_Parcel.csv
 ```
 Reviews (status, notes) are kept in `candidate_reviews` and survive rebuilds.
+
+## Map overlays
+
+- **City limits**: incorporated cities tinted blue; untinted land is unincorporated King County (county zoning applies).
+- **Urban growth line**: King County's Urban Growth Area boundary; the rural side is tinted green.
+
+Both are public King County GIS boundaries saved as static files in `public/data/`. Refresh with `npm run fetch:boundaries`.

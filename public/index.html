@@ -115,6 +115,8 @@
   <label><input type="checkbox" id="lyHill" checked> Hillshade</label>
   <label><input type="checkbox" id="ly3d"> 3D terrain</label>
   <label><input type="checkbox" id="lyAff"> $200k+ households</label>
+  <label><input type="checkbox" id="lyCity"> City limits</label>
+  <label><input type="checkbox" id="lyUga"> Urban growth line</label>
 </div>
 
 <div id="legend" class="mapctl">
@@ -123,6 +125,8 @@
   <span><i class="sw fail"></i>Fail</span>
   <span id="driveLegend" hidden><i class="sw" style="background:#1f5c45"></i>20 min drive <i class="sw" style="background:#3f7f9f;margin-left:8px"></i>30 min</span>
   <span id="candLegend"><i class="ramp score"></i>Candidate score: low → high</span>
+  <span id="cityLegend" hidden><i class="sw" style="background:#3f6fb5;opacity:.5"></i>Inside a city (city zoning) · no tint = unincorporated (county zoning)</span>
+  <span id="ugaLegend" hidden><i class="sw" style="background:none;border-top:2px dashed #b4492a;border-radius:0;height:0;vertical-align:3px"></i>Urban growth line · <i class="sw" style="background:#7a8f3a;opacity:.4"></i>rural side</span>
   <span id="affLegend" hidden><i class="ramp"></i>$200k+ share: 0% → 50%+</span>
   <span id="affMissing" hidden class="muted">Shapes only: add CENSUS_API_KEY for income</span>
 </div>
@@ -137,5 +141,6 @@
 <script src="auth.js"></script>
 <script src="app.js"></script>
 <script src="candidates.js"></script>
+<script src="overlays.js"></script>
 </body>
 </html>

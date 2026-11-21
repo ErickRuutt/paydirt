@@ -69,7 +69,8 @@ Implications for the build:
 
 ## Overlays to add
 - Development sites (active permits, SEPA notices, land-use applications).
-- Incorporated vs unincorporated land (city limits), with urban growth area boundary.
+- ~~Incorporated vs unincorporated land (city limits), with urban growth area boundary.~~ Done Nov 21.
+- Free hazard layers from King County's DistrictsReport service (landslide, erosion, seismic, SAO wetlands, floodplain, coal mine) could replace part of the paid buildable check.
 - Zoning verdict, ownership signals, drive-time, $200k+ households (exists), flood/wetland.
 
 ## Intel network (the Blind/Fishbowl idea) — to think about
