@@ -111,3 +111,52 @@ CREATE TABLE IF NOT EXISTS sales (
   recording_nbr TEXT
 );
 CREATE INDEX IF NOT EXISTS sales_pin_date ON sales (pin, doc_date);
+
+-- Every King County parcel of 5+ acres, scored for fit, owner likelihood to sell and market.
+-- Rebuilt by `npm run import:candidates` from free county data; no paid API calls.
+CREATE TABLE IF NOT EXISTS candidates (
+  pin TEXT PRIMARY KEY,
+  address TEXT,
+  city TEXT,               -- NULL = unincorporated King County
+  postal_city TEXT,
+  zip TEXT,
+  acres DOUBLE PRECISION,
+  zoning TEXT,
+  sports_verdict TEXT,     -- permitted / conditional / prohibited / unknown
+  sports_note TEXT,
+  present_use TEXT,
+  prop_type TEXT,
+  land_value DOUBLE PRECISION,
+  impr_value DOUBLE PRECISION,
+  tax_status TEXT,         -- T taxable, X exempt, O operating
+  current_use TEXT,        -- open space / farm / timber tax program, if any
+  mail_address TEXT,
+  mail_city_state TEXT,
+  absentee BOOLEAN,
+  out_of_state BOOLEAN,
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  geometry_json TEXT,
+  years_held DOUBLE PRECISION,       -- since last market sale
+  years_since_transfer DOUBLE PRECISION,
+  signals TEXT,                      -- JSON array
+  hh200k_10mi INTEGER,
+  share200k_10mi DOUBLE PRECISION,
+  kids_share_10mi DOUBLE PRECISION,
+  fit_score INTEGER,
+  owner_score INTEGER,
+  market_score INTEGER,
+  score INTEGER,
+  excluded TEXT,                     -- reason it's hidden by default, or NULL
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS candidates_score ON candidates (score DESC) WHERE excluded IS NULL;
+
+-- Review state for candidates, kept apart so rebuilding candidates never wipes it.
+CREATE TABLE IF NOT EXISTS candidate_reviews (
+  pin TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'new',
+  notes TEXT DEFAULT '',
+  updated_by TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);

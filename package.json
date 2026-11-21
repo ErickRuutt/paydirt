@@ -9,7 +9,9 @@
     "build": "node scripts/check.js",
     "db:migrate": "node --env-file-if-exists=.env scripts/db-migrate.js",
     "import:sales": "node --env-file-if-exists=.env scripts/import-sales.js",
-    "import:census": "node --env-file-if-exists=.env scripts/import-census.js"
+    "import:census": "node --env-file-if-exists=.env scripts/import-census.js",
+    "fetch:gis": "node scripts/fetch-gis-parcels.js",
+    "import:candidates": "node --env-file-if-exists=.env scripts/import-candidates.js"
   },
   "engines": {
     "node": ">=20.9"

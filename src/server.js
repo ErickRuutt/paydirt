@@ -7,6 +7,8 @@ import { storeMatches, parcelsGeoJSON } from './parcels.js';
 import { ownershipFor } from './ownership.js';
 import { reachFor, reachWithin, blockGroupsGeoJSON, hasDemographics } from './demographics.js';
 import { getIsochrones, contoursByMinutes, pointInGeometry, hasMapbox } from './isochrone.js';
+import { listCandidates, getCandidate, reviewCandidate, REVIEW_STATUSES, KEY_FIELDS } from './candidates.js';
+import { KC_CODE_SOURCE } from './zoning-kc.js';
 
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
 const app = express();
@@ -36,18 +38,67 @@ app.get('/api/config', wrap(async (req, res) => {
 
 app.get('/api/parcels', wrap(async (req, res) => res.json(await parcelsGeoJSON(criteria))));
 
+// Ownership history, straight-line reach and drive-time reach for a point.
+async function profileFor(pin, lat, lng) {
+  // Drive time is best-effort: a Mapbox failure shouldn't hide ownership or straight-line reach.
+  let isochrones = null, driveError = null;
+  try { isochrones = await getIsochrones(lat, lng, criteria.driveMinutes); } catch (err) { driveError = err.message; }
+  const [ownership, reach, drive] = await Promise.all([
+    ownershipFor(pin),
+    reachFor(lat, lng, criteria.reachMiles),
+    isochrones ? reachWithin(contoursByMinutes(isochrones), pointInGeometry) : null,
+  ]);
+  return { ownership, reach, drive, isochrones, driveError };
+}
+
 app.get('/api/parcels/:id/profile', wrap(async (req, res) => {
   const p = await parcelPoint(req.params.id);
   if (!p) throw httpError(404, 'Parcel not found.');
-  // Drive time is best-effort: a Mapbox failure shouldn't hide ownership or straight-line reach.
-  let isochrones = null, driveError = null;
-  try { isochrones = await getIsochrones(p.lat, p.lng, criteria.driveMinutes); } catch (err) { driveError = err.message; }
-  const [ownership, reach, drive] = await Promise.all([
-    ownershipFor(p.parcelnumb),
-    reachFor(p.lat, p.lng, criteria.reachMiles),
-    isochrones ? reachWithin(contoursByMinutes(isochrones), pointInGeometry) : null,
-  ]);
-  res.json({ ownership, reach, drive, isochrones, driveError });
+  res.json(await profileFor(p.parcelnumb, p.lat, p.lng));
+}));
+
+// ---------- Candidates: every 5+ acre parcel, scored from free county data ----------
+app.get('/api/candidates', wrap(async (req, res) => res.json(await listCandidates(req.query))));
+
+app.get('/api/candidates/:pin', wrap(async (req, res) => {
+  const c = await getCandidate(req.params.pin);
+  if (!c) throw httpError(404, 'Candidate not found.');
+  const enr = await one('SELECT raw_json, created_at FROM enrichments WHERE parcelnumb = ? ORDER BY id DESC LIMIT 1', [c.pin]);
+  res.json({ ...c, zoningSource: KC_CODE_SOURCE, keyFields: KEY_FIELDS,
+    enrichment: enr ? { fields: JSON.parse(enr.raw_json).fields ?? {}, created_at: enr.created_at } : null });
+}));
+
+app.get('/api/candidates/:pin/profile', wrap(async (req, res) => {
+  const c = await one('SELECT pin, lat, lng FROM candidates WHERE pin = ?', [req.params.pin]);
+  if (!c) throw httpError(404, 'Candidate not found.');
+  res.json(await profileFor(c.pin, c.lat, c.lng));
+}));
+
+app.patch('/api/candidates/:pin', wrap(async (req, res) => {
+  const { status, notes } = req.body ?? {};
+  if (status != null && !REVIEW_STATUSES.includes(status)) throw httpError(400, `Status must be one of: ${REVIEW_STATUSES.join(', ')}`);
+  if (!(await one('SELECT 1 FROM candidates WHERE pin = ?', [req.params.pin]))) throw httpError(404, 'Candidate not found.');
+  await reviewCandidate(req.params.pin, { status, notes }, req.userId);
+  res.json({ ok: true });
+}));
+
+app.post('/api/candidates/:pin/enrich', wrap(async (req, res) => {
+  const c = await one('SELECT pin, lat, lng FROM candidates WHERE pin = ?', [req.params.pin]);
+  if (!c) throw httpError(404, 'Candidate not found.');
+  const presets = ['zoning', 'terrain', 'constraints'];
+  const { result, charged } = await enrichParcel({ lat: c.lat, lng: c.lng, presets });
+  const status = result.parcel_match?.status ?? 'unknown';
+  const matchedId = result.parcel_match?.parcel?.parcelnumb;
+  await run('INSERT INTO enrichments (parcelnumb, presets, match_status, raw_json) VALUES (?, ?, ?, ?)',
+    [c.pin, presets.join(','), status, JSON.stringify(result)]);
+  res.json({
+    status,
+    samePin: matchedId ? String(matchedId).replace(/\D/g, '') === c.pin : null,
+    matchedParcel: matchedId ?? null,
+    fields: result.fields ?? {},
+    chargedUsd: charged,
+    spentUsd: await totalSpend(),
+  });
 }));
 
 app.get('/api/block-groups', wrap(async (req, res) => res.json(await blockGroupsGeoJSON())));

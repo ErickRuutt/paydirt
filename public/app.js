@@ -11,6 +11,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const USE_LABELS = { lit_fields: 'Lit outdoor fields', sports_club: 'Sports club / indoor rec', restaurant: 'Restaurant', office: 'Coworking / office' };
 
 let config, data = { type: 'FeatureCollection', features: [] }, selectedId = null, nextCursor = null;
+let detailFor = null; // id of whatever the detail panel shows (searched parcel or candidate)
 
 async function api(path, opts = {}) {
   const token = await window.paydirtAuth.token(); // waits until someone is signed in
@@ -147,7 +148,7 @@ function renderList() {
     const p = f.properties;
     return `<li data-id="${esc(p.parcelnumb)}" class="${p.parcelnumb === selectedId ? 'sel' : ''}">
       <span class="t">${esc(p.address || p.parcelnumb)}</span><span class="pill ${p.screen}">${p.screen}</span>
-      <span class="m">${fmt.ac(p.acres)} · ${esc(p.zoning || 'no zone')} · ${esc(p.jurisdiction)}${p.status !== 'new' ? ' · ' + esc(p.status) : ''}${p.yearsSinceMarketSale != null ? ` · held ${Math.floor(p.yearsSinceMarketSale)}y` : ''}${p.hh200kNearby != null ? ` · ${p.hh200kNearby.toLocaleString()} $200k+ hh in ${config.criteria.reachHeadlineMiles} mi` : ''}</span>
+      <span class="m">${fmt.ac(p.acres)} · ${esc(p.zoning || 'no zone')} · ${esc(p.jurisdiction)}${p.status !== 'new' ? ' · ' + esc(p.status) : ''}${p.yearsSinceMarketSale != null ? ` · held ${Math.floor(p.yearsSinceMarketSale)}y` : ''}${p.hh200kNearby != null ? ` · ${p.hh200kNearby.toLocaleString()} $200k+ hh in ${config?.criteria.reachHeadlineMiles ?? 10} mi` : ''}</span>
       ${(p.ownerSignals ?? []).filter((s) => /inherit|held|no market|family/.test(s)).map((s) => `<span class="chip">${esc(s)}</span>`).join('')}</li>`;
   }).join('');
 }
@@ -179,7 +180,8 @@ $('moreBtn').onclick = () => runSearch(nextCursor);
 // ---------- Detail ----------
 function select(id, fly) {
   if (selectedId) map.setFeatureState({ source: 'parcels', id: selectedId }, { selected: false });
-  selectedId = id;
+  selectedId = id; detailFor = id;
+  window.clearCandidate?.();
   map.setFeatureState({ source: 'parcels', id }, { selected: true });
   const f = data.features.find((x) => x.properties.parcelnumb === id);
   if (!f) return;
@@ -265,7 +267,7 @@ function setDrive(fc) {
 const reachRow = (label, x) => `<tr><td>${label}</td><td class="n">${x.households.toLocaleString()}</td><td class="n">${x.hh200k.toLocaleString()} (${fmt.pct(x.share200k)})</td><td class="n">${fmt.pct(x.shareWithKids)}</td><td class="n">${fmt.usd(x.medianIncomeApprox)}</td></tr>`;
 
 function renderProfile({ ownership: o, reach, drive, isochrones, driveError }, forId) {
-  if (forId !== selectedId) return;
+  if (forId !== detailFor) return;
   setDrive(isochrones);
   if (!o.available) $('ownOut').textContent = 'Sales history not imported. Run node scripts/import-sales.js.';
   else if (!o.records) $('ownOut').innerHTML = `No recorded sales for this parcel number.${o.signals?.length ? ` <span class="chip">${esc(o.signals[0])}</span>` : ''}`;
@@ -306,7 +308,8 @@ function showFields(fields, when) {
 $('closeDetail').onclick = () => {
   $('detail').hidden = true;
   if (selectedId) map.setFeatureState({ source: 'parcels', id: selectedId }, { selected: false });
-  selectedId = null; setDrive(null); renderList();
+  selectedId = null; detailFor = null; setDrive(null); renderList();
+  window.clearCandidate?.();
 };
 
 loadConfig().catch((e) => { $('searchMsg').className = 'msg err'; $('searchMsg').textContent = e.message; });

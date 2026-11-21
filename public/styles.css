@@ -23,11 +23,11 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .msg { margin: 0; min-height: 1.2em; color: var(--muted); }
 .msg.err { color: var(--fail); }
 .listHead { display: flex; justify-content: space-between; align-items: center; }
-#list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-#list li { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
-#list li:hover, #list li.sel { border-color: var(--pine); }
-#list .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#list .m { color: var(--muted); font-size: 12px; grid-column: 1 / -1; }
+#list, .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#list li, .list li { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
+#list li:hover, #list li.sel, .list li:hover, .list li.sel { border-color: var(--pine); }
+.list .t, #list .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .m, #list .m { color: var(--muted); font-size: 12px; grid-column: 1 / -1; }
 .pill { font-size: 11px; padding: 1px 7px; border-radius: 99px; color: #fff; align-self: start; text-transform: capitalize; }
 .pill.pass, .pill.permitted { background: var(--pass); }
 .pill.review, .pill.unknown, .pill.conditional { background: var(--review); }
@@ -69,3 +69,15 @@ textarea { width: 100%; min-height: 60px; resize: vertical; }
 #signin[hidden] { display: none; }
 .signinCard { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
 .signinCard .sub { margin: 0 0 12px; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: -8px; }
+.tabs button { background: none; color: var(--muted); border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 6px 10px; }
+.tabs button[aria-selected="true"] { color: var(--pine); border-bottom-color: var(--pine); font-weight: 600; }
+#tabCand, #tabSearch { display: flex; flex-direction: column; gap: 22px; }
+#tabCand[hidden], #tabSearch[hidden] { display: none; }
+.score { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13px; min-width: 28px; text-align: center; padding: 1px 6px; border-radius: 6px; color: #fff; align-self: start; }
+.ramp.score { width: 60px; height: 10px; padding: 0; background: linear-gradient(90deg, #d9d4c7, #c99a1b, #2e8b57, #1f5c45); }
+.bars { display: grid; grid-template-columns: 70px 1fr 30px; gap: 4px 8px; align-items: center; font-size: 12px; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--pine); }
+.pill.new { background: var(--muted); } .pill.shortlist { background: var(--pine); } .pill.contacted { background: #3f7f9f; } .pill.rejected { background: var(--fail); }

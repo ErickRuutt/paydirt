@@ -15,6 +15,37 @@
     <p id="keyWarn" class="warn" hidden>No Mireye key loaded. Run <code>mireye-mcp connect</code> or set <code>MIREYE_API_KEY</code> in <code>.env</code>.</p>
   </header>
 
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" id="tabBtnCand" aria-selected="true">Candidates</button>
+    <button type="button" role="tab" id="tabBtnSearch" aria-selected="false">Mireye search</button>
+  </nav>
+
+  <div id="tabCand">
+    <form id="candForm">
+      <p class="muted" style="margin:0;font-size:12px">Every King County parcel of 5+ acres, scored from free county data. Ranked by fit, owner signals and nearby $200k+ households.</p>
+      <div class="row">
+        <label>Min acres <input id="cMinAc" type="number" min="0" step="1" value="13"></label>
+        <label>Max acres <input id="cMaxAc" type="number" min="0" step="1" value="40"></label>
+      </div>
+      <div class="row">
+        <label>Sports club zoning
+          <select id="cVerdict"><option value="permitted,conditional,unknown">Allowed or unknown</option><option value="permitted,conditional">Allowed (county code)</option><option value="permitted">Permitted outright</option><option value="unknown">Inside a city (unread)</option></select></label>
+        <label>Min score <input id="cMinScore" type="number" min="0" max="100" step="5" value="0"></label>
+      </div>
+      <div class="row">
+        <label>Area <input id="cArea" type="text" placeholder="e.g. Redmond, Duvall"></label>
+        <label>Owner signal
+          <select id="cSignal"><option value="">Any</option><option value="held">Held 20+ years</option><option value="inherit">Inherited</option><option value="family or trust">Family or trust transfer</option><option value="no market sale">No market sale on record</option><option value="out of state">Owner out of state</option><option value="mostly land">Little or no building</option></select></label>
+      </div>
+      <label>Review status <select id="cStatus"><option value="">Any</option><option value="shortlist">Shortlist</option><option value="contacted">Contacted</option><option value="rejected">Rejected</option></select></label>
+    </form>
+    <section>
+      <div class="listHead"><h2>Candidates <span id="cCount" class="muted"></span></h2></div>
+      <ul id="cList" class="list"></ul>
+    </section>
+  </div>
+
+  <div id="tabSearch" hidden>
   <form id="searchForm">
     <h2>Search</h2>
     <div class="row">
@@ -48,6 +79,7 @@
     <ul id="list"></ul>
     <p id="empty" class="muted">No parcels stored yet. Run a small search to start.</p>
   </section>
+  </div>
 </aside>
 
 <main id="map"></main>
@@ -64,6 +96,7 @@
   <span><i class="sw review"></i>Review</span>
   <span><i class="sw fail"></i>Fail</span>
   <span id="driveLegend" hidden><i class="sw" style="background:#1f5c45"></i>20 min drive <i class="sw" style="background:#3f7f9f;margin-left:8px"></i>30 min</span>
+  <span id="candLegend"><i class="ramp score"></i>Candidate score: low → high</span>
   <span id="affLegend" hidden><i class="ramp"></i>$200k+ share: 0% → 50%+</span>
   <span id="affMissing" hidden class="muted">Shapes only: add CENSUS_API_KEY for income</span>
 </div>
@@ -77,5 +110,6 @@
 <div id="signin" hidden><div class="signinCard"><h1>Paydirt</h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
 <script src="auth.js"></script>
 <script src="app.js"></script>
+<script src="candidates.js"></script>
 </body>
 </html>
