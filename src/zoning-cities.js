@@ -121,6 +121,33 @@ export const CITY_RULES = {
       R(/^(O|PO|OLB|OLB2|OLB-OS|LI|GC|NB|NMU|CB|MU-?\d+|F-?\d)$/, 'conditional', 'Athletic fields need a conditional use or administrative permit; athletic clubs permitted or conditional by district (LUC 20.10.440).'),
     ],
   },
+  TUKWILA: {
+    source: 'https://ecode360.com/attachment/340023/TU6948-018zzo%20Table%206%20-%20Land%20Uses%20Allowed%20by%20District.pdf',
+    rules: [
+      R(/^(C\/LI|LI|HI)$/, 'conditional', 'Indoor commercial recreation permitted; outdoor commercial recreation needs a conditional use permit (TMC Table 18-6).'),
+      R(/^(MIC\/L|MIC\/H|TVS|TSO|TUC-.*|NM|RC|NCC)$/, 'conditional', 'Indoor commercial recreation permitted (some size limits); outdoor commercial recreation not listed (TMC Table 18-6).'),
+      R(/^(CR|HDR|LDR|MDR)$/, 'prohibited', 'Commercial recreation not allowed in residential districts (TMC Table 18-6).'),
+    ],
+  },
+  'NORTH BEND': {
+    source: 'https://ecode360.com/48653947',
+    rules: [
+      R(/^(IC|NB|BP)$/, 'permitted', 'Indoor commercial recreation and athletic fields/sports facilities both permitted (NBMC Table 18.10.030).'),
+      R(/^NMU$/, 'conditional', 'Indoor commercial recreation permitted; athletic fields/sports facilities need a conditional use permit (NBMC Table 18.10.030).'),
+      R(/^(IMU|EP)$/, 'conditional', 'Indoor commercial recreation permitted; athletic fields not listed (NBMC Table 18.10.030).'),
+      R(/^POSPF$/, 'conditional', 'Athletic fields permitted; indoor commercial recreation not listed; public facilities zone (NBMC Table 18.10.030).'),
+      R(/^(LDR|CLDR|MDR|HDR)$/, 'prohibited', 'Indoor recreation and athletic fields not listed in residential zones (NBMC Table 18.10.030).'),
+    ],
+  },
+  CARNATION: {
+    source: 'https://storage.googleapis.com/proudcity/carnationwa/2025/02/Carnation-Municipal-Code-Chapter-15-and-16.pdf',
+    rules: [
+      R(/^AGI$/, 'permitted', 'Fitness/sport centers, indoor recreation (up to 10,000 sq ft) and outdoor recreation permitted (CMC 15.40 Table 2).'),
+      R(/^(LI\/M|HC|SC)$/, 'conditional', 'Fitness/sport centers permitted; outdoor recreation needs a special or conditional use permit (CMC 15.40 Table 2).'),
+      R(/^(CBD|MU)$/, 'conditional', 'Indoor recreation and fitness centers permitted; outdoor recreation not listed (CMC 15.40 Table 2).'),
+      R(/^R\d/, 'prohibited', 'Recreation uses not listed in residential zones (CMC 15.40 Table 1).'),
+    ],
+  },
   'FEDERAL WAY': {
     source: 'https://www.federalwaywa.gov/sites/default/files/Documents/Department/CD/Planning/Land%20Use%20Apps%20and%20Info%20Handouts/047%20Summary%20of%20Uses_1.pdf',
     rules: [
