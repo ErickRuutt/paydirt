@@ -6,3 +6,4 @@ data/raw/
 .env.*.local
 .clerk/
 .DS_Store
+.neon

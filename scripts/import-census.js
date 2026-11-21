@@ -1,7 +1,7 @@
 // Import block-group shapes (TIGERweb, no key) and ACS 5-year demographics (Census API, needs CENSUS_API_KEY).
-// Usage: node --env-file-if-exists=.env scripts/import-census.js
+// Usage: npm run import:census
 import { readFileSync } from 'node:fs';
-import { db } from '../src/db.js';
+import { connect, insertMany, setMeta } from './lib/pg-script.js';
 
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
 const STATE = criteria.county.fips.slice(0, 2);
@@ -17,21 +17,18 @@ const tigerUrl = `https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/
 const geo = await (await fetch(tigerUrl)).json();
 if (!geo.features?.length) throw new Error(`TIGERweb returned no block groups: ${JSON.stringify(geo).slice(0, 300)}`);
 
-const upsertShape = db.prepare(`INSERT INTO block_groups (geoid, lat, lng, geometry_json) VALUES (?, ?, ?, ?)
-  ON CONFLICT(geoid) DO UPDATE SET lat=excluded.lat, lng=excluded.lng, geometry_json=excluded.geometry_json`);
-db.exec('BEGIN');
-for (const f of geo.features) {
-  const p = f.properties;
-  if (Number(p.AREALAND) === 0) continue; // water-only block groups
-  upsertShape.run(p.GEOID, Number(p.INTPTLAT), Number(p.INTPTLON), JSON.stringify(f.geometry));
-}
-db.exec('COMMIT');
-console.log(`Shapes: ${geo.features.length} block groups.`);
+const client = await connect();
+const shapes = geo.features.filter((f) => Number(f.properties.AREALAND) > 0) // skip water-only block groups
+  .map((f) => [f.properties.GEOID, Number(f.properties.INTPTLAT), Number(f.properties.INTPTLON), JSON.stringify(f.geometry)]);
+await insertMany(client, 'block_groups', ['geoid', 'lat', 'lng', 'geometry_json'], shapes,
+  { onConflict: 'ON CONFLICT (geoid) DO UPDATE SET lat = excluded.lat, lng = excluded.lng, geometry_json = excluded.geometry_json' });
+console.log(`Shapes: ${shapes.length} block groups.`);
 
 // 2. ACS 5-year estimates. Income brackets top out at $200k+, so that's our affluence proxy.
 const key = process.env.CENSUS_API_KEY;
 if (!key) {
   console.log('No CENSUS_API_KEY in .env, so demographics were skipped. Get a free key at https://api.census.gov/data/key_signup.html and rerun.');
+  await client.end();
   process.exit(0);
 }
 const VARS = {
@@ -51,15 +48,16 @@ const idx = Object.fromEntries(head.map((h, i) => [h, i]));
 // Census uses large negative sentinels (e.g. -666666666) for "not available".
 const val = (r, k) => { const n = Number(r[idx[k]]); return Number.isFinite(n) && n >= 0 ? n : null; };
 
-const upsertAcs = db.prepare(`UPDATE block_groups SET acs_year = ?, population = ?, households = ?, hh_200k_plus = ?, median_income = ?, hh_with_kids = ? WHERE geoid = ?`);
 let matched = 0;
-db.exec('BEGIN');
+await client.query('BEGIN');
 for (const r of rows) {
   const geoid = r[idx.state] + r[idx.county] + r[idx.tract] + r[idx['block group']];
-  matched += upsertAcs.run(ACS_YEAR, val(r, 'B01003_001E'), val(r, 'B19001_001E'), val(r, 'B19001_017E'), val(r, 'B19013_001E'), val(r, 'B11005_002E'), geoid).changes;
+  const u = await client.query(
+    'UPDATE block_groups SET acs_year = $1, population = $2, households = $3, hh_200k_plus = $4, median_income = $5, hh_with_kids = $6 WHERE geoid = $7',
+    [ACS_YEAR, val(r, 'B01003_001E'), val(r, 'B19001_001E'), val(r, 'B19001_017E'), val(r, 'B19013_001E'), val(r, 'B11005_002E'), geoid]);
+  matched += u.rowCount;
 }
-db.exec('COMMIT');
-db.prepare(`INSERT INTO dataset_meta (name, imported_at, rows, source) VALUES ('acs', datetime('now'), ?, ?)
-  ON CONFLICT(name) DO UPDATE SET imported_at=excluded.imported_at, rows=excluded.rows, source=excluded.source`)
-  .run(matched, `ACS ${ACS_YEAR} 5-year, block groups`);
+await setMeta(client, 'acs', matched, `ACS ${ACS_YEAR} 5-year, block groups`);
+await client.query('COMMIT');
+await client.end();
 console.log(`Demographics: ${rows.length} rows from ACS ${ACS_YEAR}, ${matched} matched to shapes.`);

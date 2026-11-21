@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { db, totalSpend } from './db.js';
+import { one, run, totalSpend } from './db.js';
 
 // Key lookup: MIREYE_API_KEY in .env wins; otherwise use the key saved by `mireye-mcp connect`.
 // Read on each call so a key rotated by mireye-mcp is picked up without a restart.
@@ -35,12 +35,11 @@ export const hasKey = () => Boolean(apiKey());
 async function call(endpoint, body, { quoteUsd, timeoutMs }) {
   const key = apiKey();
   if (!key) throw httpError(400, 'No Mireye key found. Run mireye-mcp connect, or set MIREYE_API_KEY in .env.');
-  const spent = totalSpend();
+  const spent = await totalSpend();
   if (spent + quoteUsd > MAX_SPEND) {
     throw httpError(402, `Spend cap reached: $${spent.toFixed(2)} of $${MAX_SPEND.toFixed(2)} used. Raise MAX_SPEND_USD in .env to continue.`);
   }
-  const log = db.prepare('INSERT INTO api_calls (endpoint, request_json) VALUES (?, ?)').run(endpoint, JSON.stringify(body));
-  const callId = log.lastInsertRowid;
+  const callId = (await one('INSERT INTO api_calls (endpoint, request_json) VALUES (?, ?) RETURNING id', [endpoint, JSON.stringify(body)])).id;
 
   let res, json;
   try {
@@ -48,7 +47,7 @@ async function call(endpoint, body, { quoteUsd, timeoutMs }) {
       method: 'POST',
       headers: {
         'X-API-Key': key,
-        'Idempotency-Key': `fh-${randomUUID()}`,
+        'Idempotency-Key': `pd-${randomUUID()}`,
         'content-type': 'application/json',
       },
       body: JSON.stringify(body),
@@ -56,13 +55,13 @@ async function call(endpoint, body, { quoteUsd, timeoutMs }) {
     });
     json = await res.json().catch(() => ({}));
   } catch (err) {
-    db.prepare('UPDATE api_calls SET error = ? WHERE id = ?').run(String(err.message), callId);
+    await run('UPDATE api_calls SET error = ? WHERE id = ?', [String(err.message), callId]);
     throw httpError(504, `Mireye request failed: ${err.message}`);
   }
 
   const charged = Number(json?.billing?.charged_usd ?? 0);
-  db.prepare('UPDATE api_calls SET status = ?, charged_usd = ?, error = ? WHERE id = ?')
-    .run(res.status, charged, res.ok ? null : JSON.stringify(json).slice(0, 2000), callId);
+  await run('UPDATE api_calls SET status = ?, charged_usd = ?, error = ? WHERE id = ?',
+    [res.status, charged, res.ok ? null : JSON.stringify(json).slice(0, 2000), callId]);
 
   if (!res.ok) {
     const code = json?.error?.code ?? json?.code ?? res.status;
@@ -85,7 +84,7 @@ export async function searchParcels({ county, acresMin, acresMax, minDevelopable
   const body = { filters, fields: SEARCH_FIELDS, limit: Math.min(Math.max(1, Number(limit)), 100), max_cost_usd: '0.20' };
   if (cursor) body.cursor = cursor;
   const { json, callId, charged } = await call('/v1/search', body, { quoteUsd: 0.2, timeoutMs: 630_000 });
-  db.prepare('UPDATE api_calls SET result_count = ? WHERE id = ?').run(json.matches?.length ?? 0, callId);
+  await run('UPDATE api_calls SET result_count = ? WHERE id = ?', [json.matches?.length ?? 0, callId]);
   return { matches: json.matches ?? [], nextCursor: json.next_cursor ?? null, remarks: json.remarks ?? [], charged };
 }
 

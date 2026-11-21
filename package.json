@@ -5,10 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch src/server.js",
-    "start": "node --env-file-if-exists=.env src/server.js"
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "build": "node scripts/check.js",
+    "db:migrate": "node --env-file-if-exists=.env scripts/db-migrate.js",
+    "import:sales": "node --env-file-if-exists=.env scripts/import-sales.js",
+    "import:census": "node --env-file-if-exists=.env scripts/import-census.js"
   },
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=20.9"
+  },
   "dependencies": {
-    "express": "^4.21.2"
+    "@neon/config": "^1.14.6",
+    "@neon/env": "^2.1.9",
+    "express": "^4.21.2",
+    "pg": "^8.23.1"
   }
 }

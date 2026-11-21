@@ -1,17 +1,17 @@
-import { db } from './db.js';
+import { all } from './db.js';
 
 // Straight-line reach from a parcel to block-group interior points. A stand-in for drive time
 // until a Mapbox isochrone layer is added; at Eastside speeds, 10 miles is roughly 20 minutes.
 // Cached for a minute so a re-import shows up without restarting the server.
 let cache = null, cachedAt = 0;
-function blockGroups() {
+async function blockGroups() {
   if (!cache || Date.now() - cachedAt > 60_000) {
-    cache = db.prepare('SELECT geoid, lat, lng, population, households, hh_200k_plus, median_income, hh_with_kids FROM block_groups WHERE acs_year IS NOT NULL').all();
+    cache = await all('SELECT geoid, lat, lng, population, households, hh_200k_plus, median_income, hh_with_kids FROM block_groups WHERE acs_year IS NOT NULL');
     cachedAt = Date.now();
   }
   return cache;
 }
-export const hasDemographics = () => blockGroups().length > 0;
+export const hasDemographics = async () => (await blockGroups()).length > 0;
 
 const R_MILES = 3958.8;
 function miles(lat1, lng1, lat2, lng2) {
@@ -21,10 +21,10 @@ function miles(lat1, lng1, lat2, lng2) {
   return 2 * R_MILES * Math.asin(Math.sqrt(a));
 }
 
-export function reachFor(lat, lng, radii) {
-  if (lat == null || lng == null || !hasDemographics()) return null;
+export async function reachFor(lat, lng, radii) {
+  if (lat == null || lng == null || !(await hasDemographics())) return null;
   const sorted = [...radii].sort((a, b) => a - b);
-  return aggregate(sorted, (bg) => {
+  return aggregate(await blockGroups(), sorted, (bg) => {
     const d = miles(lat, lng, bg.lat, bg.lng);
     return sorted.filter((r) => d <= r);
   });
@@ -32,15 +32,15 @@ export function reachFor(lat, lng, radii) {
 
 // Same totals, counting block groups whose interior point falls inside each drive-time area.
 // areas: { minutes: GeoJSON geometry }.
-export function reachWithin(areas, pointInGeometry) {
+export async function reachWithin(areas, pointInGeometry) {
   const keys = Object.keys(areas ?? {});
-  if (!keys.length || !hasDemographics()) return null;
-  return aggregate(keys, (bg) => keys.filter((k) => pointInGeometry(bg.lng, bg.lat, areas[k])));
+  if (!keys.length || !(await hasDemographics())) return null;
+  return aggregate(await blockGroups(), keys, (bg) => keys.filter((k) => pointInGeometry(bg.lng, bg.lat, areas[k])));
 }
 
-function aggregate(keys, keysContaining) {
+function aggregate(groups, keys, keysContaining) {
   const out = Object.fromEntries(keys.map((r) => [r, { blockGroups: 0, population: 0, households: 0, hh200k: 0, hhWithKids: 0, incomeWeighted: 0, incomeHouseholds: 0 }]));
-  for (const bg of blockGroups()) {
+  for (const bg of groups) {
     for (const r of keysContaining(bg)) {
       const o = out[r];
       o.blockGroups++;
@@ -64,8 +64,8 @@ function aggregate(keys, keysContaining) {
   }]));
 }
 
-export function blockGroupsGeoJSON() {
-  const rows = db.prepare('SELECT * FROM block_groups').all();
+export async function blockGroupsGeoJSON() {
+  const rows = await all('SELECT * FROM block_groups');
   return {
     type: 'FeatureCollection',
     features: rows.map((b) => ({
