@@ -1,4 +1,4 @@
-import { REQUIREMENT_FIELDS, PREFERENCE_FIELDS, SIGNAL_LABELS, TAG_LABELS, normalizeSpec } from './spec.js';
+import { PREFERENCE_FIELDS, SIGNAL_LABELS, TAG_LABELS, PENDING, normalizeSpec } from './spec.js';
 
 // The criteria bar: each chip is a plain-language view over the stored spec. A chip owns a fixed set of
 // requirement fields (its Must part: hides sites) and preference fields (its Nice part: ranks sites).
@@ -25,13 +25,6 @@ export function importanceOf(weight) {
   return best;
 }
 
-// Criteria Paydirt can't check yet. Their values are kept on the project so nothing the user asked for is lost.
-export const PENDING = {
-  drive_time: { label: 'Drive time', instead: 'Paydirt uses the towns you name until drive time is ready.' },
-  buildable: { label: 'Buildable acres', instead: 'Slope, wetlands and flood zones aren\'t checked yet; the paid per-parcel check still works.' },
-  other_use_zoning: { label: 'Zoning for other uses', instead: 'Zoning answers only for sports facilities today.' },
-  listed_for_sale: { label: 'Listed for sale', instead: 'There is no listing data yet.' },
-};
 
 // spec → chips, in bar order (standard chips always present, unset when the spec has nothing for them).
 export function specToChips(spec) {
@@ -99,5 +92,4 @@ export const CHIP_CATALOG = {
   pending: PENDING,
   signals: SIGNAL_LABELS,
   tags: TAG_LABELS,
-  requirementFields: Object.fromEntries(Object.entries(REQUIREMENT_FIELDS).map(([k, v]) => [k, { label: v.label, type: v.type, options: v.options }])),
 };

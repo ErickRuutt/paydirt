@@ -92,7 +92,14 @@ export const FIELD_HOUSE_SPEC = {
 const num = (v) => (v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 const text = (v, n = 500) => String(v ?? '').slice(0, n);
 
-export const PENDING_KEYS = ['drive_time', 'buildable', 'other_use_zoning', 'listed_for_sale'];
+// Criteria Paydirt can't check yet, with what it uses instead.
+export const PENDING = {
+  drive_time: { label: 'Drive time', instead: 'Paydirt uses the towns you name until drive time is ready.' },
+  buildable: { label: 'Buildable acres', instead: 'Slope, wetlands and flood zones aren\'t checked yet; the paid per-parcel check still works.' },
+  other_use_zoning: { label: 'Zoning for other uses', instead: 'Zoning answers only for sports facilities today.' },
+  listed_for_sale: { label: 'Listed for sale', instead: 'There is no listing data yet.' },
+};
+export const PENDING_KEYS = Object.keys(PENDING);
 
 export function normalizeSpec(input) {
   const errors = [];

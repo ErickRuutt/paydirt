@@ -50,11 +50,13 @@ export async function updateProject(id, { name, brief, spec, changeNote = '', ba
   // One transaction, row-locked: a save based on an older version than the one stored is refused (409),
   // so two people editing at once never silently overwrite each other.
   const client = await pool.connect();
+  let released = false;
   try {
     await client.query('BEGIN');
     const cur = (await client.query('SELECT spec, spec_version FROM projects WHERE id = $1 FOR UPDATE', [p.id])).rows[0];
     if (baseVersion != null && Number(baseVersion) !== cur.spec_version) {
       await client.query('ROLLBACK');
+      client.release(); released = true;
       const latest = await getProject(p.id, user?.orgUid);
       throw Object.assign(new Error('Someone changed this project since you opened it.'), { status: 409, project: { ...latest, history: await projectHistory(p.id) } });
     }
@@ -70,9 +72,9 @@ export async function updateProject(id, { name, brief, spec, changeNote = '', ba
     }
     await client.query('COMMIT');
   } catch (e) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (!released) await client.query('ROLLBACK').catch(() => {});
     throw e;
-  } finally { client.release(); }
+  } finally { if (!released) client.release(); }
   return getProject(p.id, user?.orgUid);
 }
 
@@ -90,7 +92,7 @@ export async function previewCount(project, spec, { hidePassed } = {}) {
 }
 
 export async function projectHistory(id) {
-  return (await all('SELECT version, spec, change_note, source, changed_by, created_at FROM project_spec_history WHERE project_id = ? ORDER BY version DESC', [Number(id)])).map(parse);
+  return (await all('SELECT version, spec, change_note, source, changed_by, created_at FROM project_spec_history WHERE project_id = ? ORDER BY version DESC LIMIT 50', [Number(id)])).map(parse);
 }
 
 export const REVIEW_STATUSES = ['new', 'shortlist', 'contacted', 'rejected'];

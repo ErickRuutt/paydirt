@@ -9,7 +9,7 @@ window.paydirtProperty = (() => {
   const OWNER_TEXT = { individual: 'Individual', trust: 'Family trust or estate', llc: 'LLC', company: 'Company', government: 'Government' };
   const VERDICT = { permitted: ['pass', 'Permitted'], conditional: ['review', 'Conditional use'], prohibited: ['fail', 'Not allowed'], unknown: ['unknown', 'Unknown'] };
 
-  let dlg, map, current = null;
+  let dlg, map, current = null, projectsCache = null;
 
   function build() {
     dlg = document.createElement('dialog');
@@ -70,7 +70,7 @@ window.paydirtProperty = (() => {
     let c, criteria;
     try {
       // The project's chips and the catalog, for the "Why it scores" checklist.
-      [c, criteria] = await Promise.all([api(`/api/projects/${projectId}/candidates/${encodeURIComponent(pin)}`), api('/api/projects')]);
+      [c, criteria] = await Promise.all([api(`/api/projects/${projectId}/candidates/${encodeURIComponent(pin)}`), (projectsCache ??= api('/api/projects').catch((e) => { projectsCache = null; throw e; }))]);
     } catch (e) { dlg.querySelector('#pmDetail').innerHTML = `<p class="msg err">${esc(e.message)}</p>`; return; }
     if (current?.pin !== pin) return;
     current.saved = Boolean(c.saved);

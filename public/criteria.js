@@ -6,7 +6,6 @@
      paydirtCriteria.history({ project, me, catalog, returnFocus, onSaved, onConflict })
      paydirtCriteria.restore(project, spec)  → saved project (throws err.status 409 with err.body.project when stale)
      paydirtCriteria.draft(el, holder, catalog)  shows holder.spec (not saved yet) as chips; edits change holder.spec in memory
-     paydirtCriteria.checklist(el, project, candidate, catalog)  "Why it scores N": one row per set chip
      paydirtCriteria.hiddenNames(hiddenFields, catalog)  short chip names for a search result the criteria hide
    `project` carries id, spec_version, spec and chips as returned by /api/projects; `catalog` is that response's catalog. */
 window.paydirtCriteria = (() => {
@@ -628,7 +627,6 @@ window.paydirtCriteria = (() => {
     });
     return `<ul class="whyList">${rows.join('')}</ul>`;
   }
-  function checklist(el, project, c, catalog) { el.innerHTML = checklistHtml(project, c, catalog); }
 
-  return { render, describe, edit, history, restore, request, showPending, draft, checklist, checklistHtml, hiddenNames };
+  return { render, describe, edit, history, restore, request, showPending, draft, checklistHtml, hiddenNames };
 })();
