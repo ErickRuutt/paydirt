@@ -66,7 +66,8 @@
 
   function savedList(id, rows) {
     if (!rows.length) return `<div class="empty"><b>Nothing saved to this project yet</b><p class="muted">Open the map and tap ☆ on a parcel.</p></div>`;
-    return `<ul class="savedList">${rows.map((p) => `<li><button type="button" class="savedRow" data-open="${id}" data-pin="${esc(p.pin)}">
+    return `<ul class="savedList">${rows.map((p, i) => `<li><button type="button" class="savedRow" data-open="${id}" data-pin="${esc(p.pin)}">
+        <span class="rank" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>
         ${p.score != null ? paydirtScore.chip(p.score) : '<span class="score none">–</span>'}
         <span class="rowMain"><span class="t">${esc(siteTitle(p))}</span><span class="m">${ac(p.acres)} · ${esc(p.zoning || 'No zone')} · ${esc(where(p))}</span>
           <span class="facts">${labels(p)}${p.hiddenByCriteria ? '<span class="pill fail">No longer fits</span>' : ''}</span></span>
@@ -101,7 +102,7 @@
     $('projCount').textContent = `${h.projects.length} active · ${h.saved.length} saved`;
     $('projects').innerHTML = h.projects.map((p) => `
       <article class="proj" data-id="${p.id}" data-open="false">
-        <div class="projHead field">
+        <div class="projHead">
           <div class="projMain">
             <div class="card-top"><h3>${esc(p.name)}</h3><span class="lblish">v${p.spec_version}</span></div>
             <p class="brief" data-taper="2">${esc(p.brief || 'No brief yet.')}</p>

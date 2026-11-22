@@ -99,8 +99,9 @@
     const shown = cand.features.slice(0, 150);
     const searching = Boolean($('cArea').value.trim());
     $('cCount').textContent = `· ${cand.total.toLocaleString()} ${searching ? 'found' : 'fit'}${cand.total > shown.length ? `, best ${shown.length} shown` : ''}`;
-    $('cList').innerHTML = shown.map(({ properties: p }) => `
+    $('cList').innerHTML = shown.map(({ properties: p }, i) => `
       <li data-pin="${esc(p.pin)}" class="row ${p.pin === candSel ? 'sel' : ''}">
+        <span class="rank" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>
         ${scoreChip(p.score)}
         <div class="rowMain">
           <span class="t">${esc(siteTitle(p))}</span>
