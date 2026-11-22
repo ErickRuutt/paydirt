@@ -64,7 +64,9 @@ export async function updateProject(id, { name, brief, spec, changeNote = '', ba
       await client.query('UPDATE projects SET name = COALESCE($1, name), brief = COALESCE($2, brief), updated_at = now() WHERE id = $3',
         [name != null ? String(name).slice(0, 120) : null, brief != null ? String(brief).slice(0, 20000) : null, p.id]);
     }
-    if (normalized && JSON.stringify(normalized.spec) !== JSON.stringify(typeof cur.spec === 'string' ? JSON.parse(cur.spec) : cur.spec)) {
+    // Compare against the stored spec normalized the same way, so a spec saved before a key existed
+    // (e.g. one without `pending`) doesn't register a no-op save as a change.
+    if (normalized && JSON.stringify(normalized.spec) !== JSON.stringify(normalizeSpec(cur.spec).spec)) {
       const version = cur.spec_version + 1;
       await client.query('UPDATE projects SET spec = $1, spec_version = $2, updated_at = now() WHERE id = $3', [JSON.stringify(normalized.spec), version, p.id]);
       await client.query('INSERT INTO project_spec_history (project_id, version, spec, change_note, source, changed_by) VALUES ($1, $2, $3, $4, $5, $6)',

@@ -77,6 +77,39 @@ test('a spec with only Must criteria saves, and every match scores 100', () => {
   const { spec: s, errors } = normalizeSpec({ requirements: [{ field: 'acres', value: [5, 80] }], preferences: [] });
   assert.deepEqual(errors, []);
   assert.match(compileSpec(s).scoreExpr, /100/);
+  // The wrapper always contains 100, so pin the whole expression: a constant full score, no sub-scores.
+  assert.equal(compileSpec(s).scoreExpr, 'GREATEST(0, LEAST(100, ROUND(100)))::int');
+  assert.deepEqual(compileSpec(s).subscores, []);
+  const weighted = normalizeSpec({ requirements: [{ field: 'acres', value: [5, 80] }], preferences: [{ field: 'acres', weight: 25 }] }).spec;
+  assert.notEqual(compileSpec(weighted).scoreExpr, compileSpec(s).scoreExpr);
+});
+
+test('Field House scoring is unchanged', () => {
+  const k = compileSpec(spec());
+  assert.deepEqual(k.subscores.map((x) => [x.field, x.weight]), [
+    ['zoning.sports_facility', 18], ['acres', 12], ['vacancy', 10], ['owner_signals', 35], ['hh200k_10mi', 25], ['business_on_site', 10],
+  ]);
+  assert.equal(k.scoreExpr, 'GREATEST(0, LEAST(100, ROUND(LEAST(s0 * 0.16363636363636364 + s1 * 0.10909090909090909 + s2 * 0.09090909090909091'
+    + ' + s3 * 0.3181818181818182 + s4 * 0.22727272727272727 + s5 * 0.09090909090909091,'
+    + ' CASE WHEN tags LIKE \'%"operating-business"%\' AND tags NOT LIKE \'%"closing-tenant"%\' THEN 40 ELSE 100 END))))::int');
+  assert.deepEqual(k.scoreParams, [100, 67, 0, 33, 13, 40, 7.8, 13, 50, 17, 100, 48, 35, 25, 25, 30, 20, 15, -25, 15, 10, 15, 60000, 65, 0, 15, 70, 100]);
+});
+
+test('re-saving any chip with its current values leaves the spec exactly as it was', () => {
+  const s = spec();
+  for (const c of specToChips(s)) {
+    const edit = { must: c.must, nice: c.nice ? { importance: c.nice.importance, params: c.nice.params } : null };
+    const next = applyChipEdit(s, c.key, edit);
+    assert.deepEqual(next.requirements, s.requirements, `requirements after re-saving ${c.key}`);
+    assert.deepEqual(next.preferences, s.preferences, `preferences after re-saving ${c.key}`);
+    assert.deepEqual(next, s, `spec after re-saving ${c.key}`);
+  }
+});
+
+test('a new field on a chip is added after the existing ones, which keep their places', () => {
+  const next = applyChipEdit(spec(), 'site', { must: { vacant: true }, nice: { importance: 'some', params: {} } });
+  assert.deepEqual(next.requirements.map((r) => r.field), ['zoning.sports_facility', 'acres', 'vacant']);
+  assert.deepEqual(next.preferences.map((p) => p.field), spec().preferences.map((p) => p.field));
 });
 
 test('pending criteria keep known keys and reject unknown ones', () => {

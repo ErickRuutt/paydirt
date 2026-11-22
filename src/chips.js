@@ -52,14 +52,12 @@ export function applyChipEdit(spec, key, edit = {}) {
   if (!def) throw Object.assign(new Error(`Unknown criterion "${key}".`), { status: 400 });
   const next = structuredClone(spec);
 
-  const keptReqs = next.requirements.filter((r) => !def.must.includes(r.field));
   const newReqs = Object.entries(edit.must ?? {})
     .filter(([f]) => def.must.includes(f))
     .map(([field, value]) => ({ field, value, why: whyFor(spec.requirements, field) }));
-  next.requirements = [...keptReqs, ...newReqs];
+  next.requirements = replaceOwned(next.requirements, def.must, newReqs);
 
   const oldPrefs = next.preferences.filter((p) => def.nice.includes(p.field));
-  const keptPrefs = next.preferences.filter((p) => !def.nice.includes(p.field));
   let newPrefs = [];
   if (edit.nice && def.nice.length) {
     const fields = Object.keys(edit.nice.params ?? {}).filter((f) => def.nice.includes(f));
@@ -77,13 +75,27 @@ export function applyChipEdit(spec, key, edit = {}) {
       return { field, weight, params, why: old?.why ?? '' };
     });
   }
-  next.preferences = [...keptPrefs, ...newPrefs];
+  next.preferences = replaceOwned(next.preferences, def.nice, newPrefs);
 
   const { spec: out, errors } = normalizeSpec(next);
   if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
   return out;
 }
 const whyFor = (list, field) => list.find((x) => x.field === field)?.why ?? '';
+
+// Swap a chip's entries into the list where they already sit, drop the ones it no longer has, and append
+// only fields that are new. Order matters: sub-score keys and the saved spec both follow it, so re-saving
+// a chip unchanged must leave the list identical.
+function replaceOwned(list, owned, entries) {
+  const byField = new Map(entries.map((e) => [e.field, e]));
+  const out = [];
+  for (const x of list) {
+    if (!owned.includes(x.field)) { out.push(x); continue; }
+    const e = byField.get(x.field);
+    if (e) { out.push(e); byField.delete(x.field); }
+  }
+  return [...out, ...byField.values()];
+}
 
 // Catalog the client needs to render editors.
 export const CHIP_CATALOG = {

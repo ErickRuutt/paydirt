@@ -142,7 +142,10 @@ window.paydirtCriteria = (() => {
   }
 
   // ---------- One dialog, reused ----------
-  let dlg = null, onClose = null, returnTo = null;
+  // `gen` counts opens, so a late response can tell whether the dialog it started in is still the one showing.
+  // `busy` is the gen of a dialog whose save is in flight; that dialog can't be closed until the save ends.
+  let dlg = null, onClose = null, returnTo = null, gen = 0, busy = 0;
+  const isBusy = () => busy !== 0 && busy === gen;
   function dialog(html, { returnFocus, closing } = {}) {
     if (!dlg) {
       dlg = document.createElement('dialog');
@@ -150,10 +153,13 @@ window.paydirtCriteria = (() => {
       dlg.setAttribute('aria-labelledby', 'critDlgTitle');
       document.body.append(dlg);
       dlg.addEventListener('click', (e) => {
+        if (isBusy()) return;
         const r = dlg.getBoundingClientRect();
         const outside = e.target === dlg && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom);
         if (outside || e.target.closest('[data-close]')) dlg.close();
       });
+      dlg.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isBusy()) e.preventDefault(); });
+      dlg.addEventListener('cancel', (e) => { if (isBusy()) e.preventDefault(); });
       dlg.addEventListener('close', () => {
         if (dlg.open) return; // reopened before this (queued) event fired
         const done = onClose, back = returnTo;
@@ -164,6 +170,7 @@ window.paydirtCriteria = (() => {
       });
     }
     if (dlg.open) { const done = onClose; onClose = null; returnTo = null; done?.(); dlg.close(); }
+    gen++; busy = 0;
     dlg.innerHTML = html;
     onClose = closing ?? null; returnTo = returnFocus ?? null;
     dlg.showModal();
@@ -364,6 +371,7 @@ window.paydirtCriteria = (() => {
         <span class="critCount"><span id="critCount" aria-live="polite"></span>${opts.nowCount?.() != null ? `<span class="critNow">Now ${fmtN(opts.nowCount())}</span>` : ''}</span></div>
       <p id="critMsg" class="msg" role="alert"></p>
     </form>`, { returnFocus: opts.returnFocus, closing: () => { closed = true; clearTimeout(timer); } });
+    const myGen = gen, live = () => gen === myGen;
     q = (s) => (s ? d.querySelector(s) : d);
     const form = d.querySelector('form');
     let closed = false, saving = false, timer = null, seq = 0, invalid = false;
@@ -433,25 +441,29 @@ window.paydirtCriteria = (() => {
         try { opts.onApply(r.edit); } catch (err) { msg.className = 'msg err'; msg.textContent = err.message; return; }
         closed = true; d.close(); return;
       }
-      saving = true; applyBtn.disabled = true; msg.className = 'msg'; msg.textContent = 'Saving…';
+      saving = true; busy = myGen; applyBtn.disabled = true; msg.className = 'msg'; msg.textContent = 'Saving…';
+      const closers = [...d.querySelectorAll('[data-close]')];
+      for (const c of closers) c.disabled = true;
       try {
         const saved = await request(`/api/projects/${base.id}`, { method: 'PUT', body: { chip: { key, edit: r.edit }, baseVersion: base.spec_version } });
-        base = saved; closed = true;
+        base = saved;
         opts.onSaved?.(saved);
-        d.close();
+        if (live()) { busy = 0; closed = true; d.close(); }
       } catch (err) {
         if (err.status === 409 && err.body?.project) {
           base = err.body.project;
           opts.onConflict?.(base);
+          if (!live()) return;
           const now = base.chips?.find((c) => c.key === key);
           const notice = d.querySelector('#critNotice');
           notice.hidden = false;
           notice.textContent = `Changed by a teammate — here's the current version: ${now ? oneLine(now, catalog) : 'not set'}. Your change is still below; apply it again to keep it.`;
           msg.textContent = '';
-        } else { msg.className = 'msg err'; msg.textContent = err.message; }
+        } else if (live()) { msg.className = 'msg err'; msg.textContent = err.message; }
       } finally {
         saving = false;
-        if (!closed) schedule();
+        if (busy === myGen) busy = 0;
+        if (live() && !closed) { for (const c of closers) c.disabled = false; schedule(); }
       }
     });
     schedule();
@@ -490,17 +502,22 @@ window.paydirtCriteria = (() => {
       <ol class="critHist">${rows()}</ol>
       <p id="critMsg" class="msg" role="alert"></p>
       <div class="critFoot"><button type="button" class="secondary" data-close>Close</button></div>`, { returnFocus: opts.returnFocus });
+    const myGen = gen, live = () => gen === myGen;
     let saving = false;
     d.querySelector('.critHist').addEventListener('click', async (e) => {
       const b = e.target.closest('[data-restore]'); if (!b || saving) return;
       const h = project.history[+b.dataset.restore];
-      saving = true; b.disabled = true; d.querySelector('#critMsg').className = 'msg'; d.querySelector('#critMsg').textContent = 'Saving…';
+      saving = true; busy = myGen; b.disabled = true; d.querySelector('#critMsg').className = 'msg'; d.querySelector('#critMsg').textContent = 'Saving…';
+      const closers = [...d.querySelectorAll('[data-close]')];
+      for (const c of closers) c.disabled = true;
       try {
         const saved = await restore(project, specOf(h));
         opts.onSaved?.(saved);
-        d.close();
+        if (live()) { busy = 0; d.close(); }
       } catch (err) {
-        if (err.status === 409 && err.body?.project) {
+        if (!live()) {
+          if (err.status === 409 && err.body?.project) opts.onConflict?.(err.body.project);
+        } else if (err.status === 409 && err.body?.project) {
           project = err.body.project;
           opts.onConflict?.(project);
           d.querySelector('.critHist').innerHTML = rows();
@@ -508,7 +525,11 @@ window.paydirtCriteria = (() => {
           n.textContent = "Changed by a teammate — here's the current version. Pick Restore again if you still want an earlier one.";
           d.querySelector('#critMsg').textContent = '';
         } else { d.querySelector('#critMsg').className = 'msg err'; d.querySelector('#critMsg').textContent = err.message; b.disabled = false; }
-      } finally { saving = false; }
+      } finally {
+        saving = false;
+        if (busy === myGen) busy = 0;
+        if (live()) for (const c of closers) c.disabled = false;
+      }
     });
   }
 
