@@ -2,8 +2,10 @@
    Shared by every page that shows a project's criteria:
      paydirtCriteria.render(el, project, catalog, { onChip(key, button), onAdd(key, button) })
      paydirtCriteria.edit({ project, catalog, key, returnFocus, nowCount, onSaved, onConflict })
+       (pass onApply(edit) instead of onSaved to change a draft in memory: no count, no save)
      paydirtCriteria.history({ project, me, catalog, returnFocus, onSaved, onConflict })
      paydirtCriteria.restore(project, spec)  → saved project (throws err.status 409 with err.body.project when stale)
+     paydirtCriteria.draft(el, holder, catalog)  shows holder.spec (not saved yet) as chips; edits change holder.spec in memory
    `project` carries id, spec_version, spec and chips as returned by /api/projects; `catalog` is that response's catalog. */
 window.paydirtCriteria = (() => {
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -111,9 +113,10 @@ window.paydirtCriteria = (() => {
         return `<button type="button" class="cchip pending" data-pending="${i}" aria-label="${esc(`${label}, not checked yet: ${p.value}`)}"><span>${esc(label)}</span>${p.value ? `<small>${esc(p.value)}</small>` : ''}</button>`;
       }).join('');
     }
+    const menuId = `${el.id || 'crit'}AddMenu`;
     if (addable.length) {
-      html += '<button type="button" class="cchip add" data-add aria-expanded="false" aria-controls="critAddMenu">+ Add</button>'
-        + `<span id="critAddMenu" class="critAddMenu" hidden>${addable.map((c) => `<button type="button" class="cchip unset" data-add-key="${esc(c.key)}">${esc(c.label)}</button>`).join('')}</span>`;
+      html += `<button type="button" class="cchip add" data-add aria-expanded="false" aria-controls="${esc(menuId)}">+ Add</button>`
+        + `<span id="${esc(menuId)}" class="critAddMenu" hidden>${addable.map((c) => `<button type="button" class="cchip unset" data-add-key="${esc(c.key)}">${esc(c.label)}</button>`).join('')}</span>`;
     }
     el.innerHTML = html;
     el.onclick = (e) => {
@@ -122,17 +125,17 @@ window.paydirtCriteria = (() => {
       if (b.dataset.chip) handlers.onChip?.(b.dataset.chip, b);
       else if (b.dataset.pending != null) showPending(pending[+b.dataset.pending], catalog, () => (b.isConnected ? b : null));
       else if (b.hasAttribute('data-add')) {
-        const menu = el.querySelector('#critAddMenu');
+        const menu = el.querySelector('.critAddMenu');
         menu.hidden = !menu.hidden;
         b.setAttribute('aria-expanded', String(!menu.hidden));
         if (!menu.hidden) menu.querySelector('button')?.focus();
       } else if (b.dataset.addKey) {
-        el.querySelector('#critAddMenu').hidden = true; addBtn?.setAttribute('aria-expanded', 'false');
+        el.querySelector('.critAddMenu').hidden = true; addBtn?.setAttribute('aria-expanded', 'false');
         (handlers.onAdd ?? handlers.onChip)?.(b.dataset.addKey, addBtn ?? b);
       }
     };
     el.onkeydown = (e) => {
-      const menu = el.querySelector('#critAddMenu');
+      const menu = el.querySelector('.critAddMenu');
       if (e.key === 'Escape' && menu && !menu.hidden) { menu.hidden = true; const a = el.querySelector('[data-add]'); a.setAttribute('aria-expanded', 'false'); a.focus(); }
     };
   }
@@ -390,6 +393,7 @@ window.paydirtCriteria = (() => {
     const countEl = d.querySelector('#critCount'), applyBtn = d.querySelector('#critApply'), msg = d.querySelector('#critMsg');
     function setCount(state, n) {
       invalid = state === 'invalid';
+      if (state === 'draft') { countEl.textContent = ''; countEl.className = ''; applyBtn.textContent = 'Apply'; applyBtn.disabled = saving; return; }
       countEl.textContent = state === 'loading' ? 'Counting…' : state === 'fail' ? 'Couldn’t count — apply anyway?' : state === 'invalid' ? n : n === 0 ? 'No sites match' : `${fmtN(n)} site${n === 1 ? '' : 's'}`;
       countEl.className = state === 'invalid' || (state === 'ok' && n === 0) ? 'warnText' : '';
       applyBtn.textContent = state === 'fail' || (state === 'ok' && n === 0) ? 'Apply anyway' : state === 'ok' ? `Show ${fmtN(n)} site${n === 1 ? '' : 's'}` : 'Show sites';
@@ -400,6 +404,7 @@ window.paydirtCriteria = (() => {
       clearTimeout(timer);
       const r = readEdit();
       if (r.error) { seq++; setCount('invalid', r.error); return; }
+      if (opts.onApply) { setCount('draft'); return; } // a draft has nothing saved to count against
       setCount('loading');
       const my = ++seq;
       timer = setTimeout(async () => {
@@ -423,6 +428,10 @@ window.paydirtCriteria = (() => {
       if (saving) return;
       const r = readEdit();
       if (r.error) { msg.className = 'msg err'; msg.textContent = r.error; return; }
+      if (opts.onApply) {
+        try { opts.onApply(r.edit); } catch (err) { msg.className = 'msg err'; msg.textContent = err.message; return; }
+        closed = true; d.close(); return;
+      }
       saving = true; applyBtn.disabled = true; msg.className = 'msg'; msg.textContent = 'Saving…';
       try {
         const saved = await request(`/api/projects/${base.id}`, { method: 'PUT', body: { chip: { key, edit: r.edit }, baseVersion: base.spec_version } });
@@ -502,5 +511,61 @@ window.paydirtCriteria = (() => {
     });
   }
 
-  return { render, describe, edit, history, restore, request, showPending };
+  // ---------- Drafts (not saved yet) ----------
+  // A mirror of the server's chip view (src/chips.js) for a spec that has no project yet, so a draft
+  // shows the same chips as the map. The server normalizes the spec again when the project is created.
+  const WEIGHT = { little: 10, some: 25, lot: 50 };
+  const importanceOf = (w) => LEVELS.reduce((best, k) => (Math.abs(w - WEIGHT[k]) < Math.abs(w - WEIGHT[best]) ? k : best), 'little');
+  function chipsOf(spec, catalog) {
+    const reqs = spec.requirements ?? [], prefs = spec.preferences ?? [];
+    const out = [];
+    for (const def of catalog.criteria.chips) {
+      const r = reqs.filter((x) => def.must.includes(x.field)), p = prefs.filter((x) => def.nice.includes(x.field));
+      if (!def.standard && !r.length && !p.length) continue;
+      const weight = p.reduce((a, x) => a + x.weight, 0);
+      out.push({
+        key: def.key, label: def.label, standard: def.standard, canNice: def.canNice,
+        must: r.length ? Object.fromEntries(r.map((x) => [x.field, x.value])) : null,
+        nice: p.length ? { importance: importanceOf(weight), weight, params: Object.fromEntries(p.map((x) => [x.field, x.params])) } : null,
+        why: [...r, ...p].map((x) => x.why).filter(Boolean)[0] ?? '',
+      });
+    }
+    return out;
+  }
+  function applyEdit(spec, key, edit, catalog) {
+    const def = catalog.criteria.chips.find((c) => c.key === key);
+    const next = structuredClone(spec);
+    const reqs = next.requirements ?? [], prefs = next.preferences ?? [];
+    const whyOf = (field) => reqs.find((x) => x.field === field)?.why ?? '';
+    next.requirements = [...reqs.filter((x) => !def.must.includes(x.field)),
+      ...Object.entries(edit.must ?? {}).filter(([f]) => def.must.includes(f)).map(([field, value]) => ({ field, value, why: whyOf(field) }))];
+    const old = prefs.filter((x) => def.nice.includes(x.field));
+    let fresh = [];
+    if (edit.nice && def.nice.length) {
+      const given = Object.keys(edit.nice.params ?? {}).filter((f) => def.nice.includes(f));
+      const fields = given.length ? given : old.length ? old.map((x) => x.field) : def.nice;
+      const oldTotal = old.reduce((a, x) => a + x.weight, 0);
+      const reweigh = !old.length || (edit.nice.importance && edit.nice.importance !== importanceOf(oldTotal));
+      const total = WEIGHT[edit.nice.importance] ?? WEIGHT.some;
+      fresh = fields.map((field) => {
+        const o = old.find((x) => x.field === field);
+        const weight = !reweigh && o ? o.weight : o && oldTotal > 0 ? Math.round((o.weight / oldTotal) * total) : Math.round(total / fields.length);
+        return { field, weight, params: { ...defaults(catalog, field), ...(o?.params ?? {}), ...(edit.nice.params?.[field] ?? {}) }, why: o?.why ?? '' };
+      });
+    }
+    next.preferences = [...prefs.filter((x) => !def.nice.includes(x.field)), ...fresh];
+    return next;
+  }
+  function draft(el, holder, catalog) {
+    const view = () => ({ id: null, spec: holder.spec, chips: chipsOf(holder.spec, catalog) });
+    const open = (key, btn) => edit({
+      project: view(), catalog, key,
+      returnFocus: () => el.querySelector(`[data-chip="${key}"]`) ?? el.querySelector('[data-add]') ?? (btn.isConnected ? btn : null),
+      onApply: (e) => { holder.spec = applyEdit(holder.spec, key, e, catalog); paint(); },
+    });
+    const paint = () => render(el, view(), catalog, { onChip: open, onAdd: open });
+    paint();
+  }
+
+  return { render, describe, edit, history, restore, request, showPending, draft };
 })();

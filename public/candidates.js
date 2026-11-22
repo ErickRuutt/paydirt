@@ -137,8 +137,11 @@
     const want = Number(selectId ?? store.get('paydirt.project'));
     project = projects.find((p) => p.id === want) ?? projects[0];
     if (!project) throw new Error('No projects yet.');
-    $('cProject').innerHTML = projects.map((p) => `<option value="${p.id}" ${p.id === project.id ? 'selected' : ''}>${esc(p.name)}${p.shortlisted ? ` (${p.shortlisted} shortlisted)` : ''}</option>`).join('');
+    paintProjectList();
     applyProject();
+  }
+  function paintProjectList() {
+    $('cProject').innerHTML = projects.map((p) => `<option value="${p.id}" ${p.id === project.id ? 'selected' : ''}>${esc(p.name)}${p.shortlisted ? ` (${p.shortlisted} shortlisted)` : ''}</option>`).join('');
   }
 
   function applyProject() {
@@ -212,6 +215,54 @@
     window.clearCandidate(); $('detail').hidden = true;
     applyProject();
     loadCandidates().catch(showErr);
+  };
+
+  // ---------- Project menu (next to the name) ----------
+  const menu = $('projMenu'), menuBtn = $('projMenuBtn');
+  function showMenu(open, focusBack) {
+    menu.hidden = !open; menuBtn.setAttribute('aria-expanded', String(open));
+    if (open) menu.querySelector('button').focus(); else if (focusBack) menuBtn.focus();
+  }
+  menuBtn.onclick = () => showMenu(menu.hidden);
+  document.addEventListener('click', (e) => { if (!menu.hidden && !e.target.closest('.critProj')) showMenu(false); });
+  menu.addEventListener('keydown', (e) => {
+    const items = [...menu.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); showMenu(false, true); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+  });
+  menu.onclick = (e) => {
+    const b = e.target.closest('[data-proj]'); if (!b) return;
+    showMenu(false);
+    if (b.dataset.proj === 'rename') startRename();
+    else window.paydirtBuilder.brief({ revise: true });
+  };
+
+  function startRename() {
+    $('projTitle').hidden = true; menuBtn.hidden = true; $('projRename').hidden = false;
+    $('projNameIn').value = project.name; $('projNameIn').select();
+  }
+  function endRename() {
+    $('projRename').hidden = true; $('projTitle').hidden = false; menuBtn.hidden = false; menuBtn.focus();
+  }
+  $('projRenameCancel').onclick = endRename;
+  $('projRename').onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); endRename(); } };
+  $('projRename').onsubmit = async (e) => {
+    e.preventDefault();
+    const name = $('projNameIn').value.trim();
+    if (!name || name === project.name) return endRename();
+    const btn = $('projRename').querySelector('[type=submit]'); btn.disabled = true;
+    const save = () => Criteria.request(`/api/projects/${project.id}`, { method: 'PUT', body: { name, baseVersion: project.spec_version } });
+    try {
+      let saved;
+      // A teammate's criteria change since this page loaded doesn't conflict with a new name: take theirs and rename it.
+      try { saved = await save(); } catch (err) { if (err.status === 409 && err.body?.project) { conflicted(err.body.project); saved = await save(); } else throw err; }
+      adopt(saved);
+      $('projTitle').textContent = project.name; paintProjectList();
+      endRename();
+    } catch (err) {
+      const input = $('projNameIn'); input.setCustomValidity(err.message); input.reportValidity();
+      input.addEventListener('input', () => input.setCustomValidity(''), { once: true });
+    } finally { btn.disabled = false; }
   };
 
   // Let the builder (builder.js) reload projects and read the current one.

@@ -85,7 +85,15 @@
 
 <header id="critBar" class="mapBar critBar">
   <div class="critRow">
-    <h1 id="projTitle" class="critName">&nbsp;</h1>
+    <div class="critProj">
+      <h1 id="projTitle" class="critName">&nbsp;</h1>
+      <form id="projRename" class="critRename" hidden><input id="projNameIn" type="text" maxlength="120" aria-label="Project name" required><button type="submit">Save</button><button type="button" id="projRenameCancel" class="secondary">Cancel</button></form>
+      <button type="button" id="projMenuBtn" class="critMenuBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="projMenu" aria-label="Project menu" title="Project menu">⋯</button>
+      <div id="projMenu" class="critMenu" role="menu" hidden>
+        <button type="button" role="menuitem" data-proj="rename">Rename</button>
+        <button type="button" role="menuitem" data-proj="revise">Revise from a new brief</button>
+      </div>
+    </div>
     <form id="candForm" class="critSearch" role="search" aria-label="Find a place or parcel">
       <input id="cArea" class="mapSearch" type="search" placeholder="Find an address, parcel # or town" aria-label="Find an address, parcel number or town">
     </form>

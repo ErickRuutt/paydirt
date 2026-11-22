@@ -676,3 +676,18 @@ body.map #map { margin-top: var(--mapbar); height: calc(100vh - var(--mapbar)); 
 .critHist li { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; background: var(--bg); }
 .critHist small { display: block; color: var(--muted); font-size: 12px; }
 .critVer, .critNow { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* Drafts shown as chips (Home, brief builder) and the project menu by the name on the map */
+.startDraft .critChips, .draft .critChips { padding: 0; background: none; }
+.startActions .expert { font-size: 13px; }
+.critProj { position: relative; display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 36%; }
+.critProj .critName { max-width: none; min-width: 0; }
+.critMenuBtn, .critMenuBtn:hover:not(:disabled) { flex: none; min-height: 30px; padding: 0 8px; border: 0; border-radius: 0; background: transparent; color: var(--fg); font: 800 20px/1 var(--display); }
+.critMenuBtn[aria-expanded="true"] { background: var(--fg); color: var(--bg); }
+.critMenu { position: absolute; top: 100%; left: 0; z-index: 30; display: grid; min-width: 220px; background: var(--surface); box-shadow: 0 0 0 2px var(--fg); }
+.critMenu[hidden], .critRename[hidden], .critProj [hidden] { display: none; }
+.critMenu button, .critMenu button:hover:not(:disabled) { padding: 10px 14px; border: 0; border-radius: 0; background: transparent; color: var(--fg); font: 600 14px var(--display); text-align: left; }
+.critMenu button:hover:not(:disabled), .critMenu button:focus-visible { background: var(--fg); color: var(--bg); }
+.critRename { display: flex; align-items: center; gap: 6px; }
+.critRename input { width: 260px; max-width: 100%; font: 800 18px var(--display); }
+@media (max-width: 1180px) { .critProj { max-width: 100%; } }

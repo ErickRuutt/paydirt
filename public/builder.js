@@ -6,7 +6,8 @@
   let lastDraft = null, source = 'markdown', chat = [];
 
   // ---------- Markdown / brief ----------
-  $('bBrief').onclick = () => {
+  // revise: start with "Revise the current project" ticked (the project menu's "Revise from a new brief").
+  function openBrief({ revise = false } = {}) {
     const cur = window.paydirtProjects.current();
     panel().innerHTML = `
       <div class="builder">
@@ -14,7 +15,7 @@
         <p class="muted" style="margin:0">Upload a markdown or text file, or paste notes. Claude drafts criteria with the reason for each, and lists anything unclear. Nothing is saved until you apply it.</p>
         <label>File <input id="brFile" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown"></label>
         <label>Brief <textarea id="brText" placeholder="e.g. We run youth soccer and want 15+ acres near Redmond or Sammamish…"></textarea></label>
-        ${cur ? `<label class="check"><input id="brRevise" type="checkbox"> Revise “${esc(cur.name)}” instead of starting a new project</label>` : ''}
+        ${cur ? `<label class="check"><input id="brRevise" type="checkbox" ${revise ? 'checked' : ''}> Revise “${esc(cur.name)}” instead of starting a new project</label>` : ''}
         <button id="brGo" type="button">Draft criteria</button>
         <p id="brMsg" class="msg"></p>
         <div id="brOut"></div>
@@ -36,7 +37,10 @@
       } catch (err) { $('brMsg').className = 'msg err'; $('brMsg').textContent = err.message; }
       finally { $('brGo').disabled = false; }
     };
-  };
+    $('brText').focus();
+  }
+  $('bBrief').onclick = () => openBrief();
+  window.paydirtBuilder = { brief: openBrief };
 
   // ---------- Interview ----------
   $('bInterview').onclick = () => {
@@ -79,16 +83,7 @@
   }
 
   // ---------- Draft review + apply ----------
-  function valueText(r, catalog) {
-    const d = catalog.requirements[r.field];
-    if (d.type === 'range') return `${r.value[0] ?? 'any'} – ${r.value[1] ?? 'any'}`;
-    if (d.type === 'set') return r.value.map((v) => (r.field === 'owner_signals' ? catalog.signals[v] : v)).join(', ');
-    if (d.type === 'list') return r.value.join(', ');
-    if (d.type === 'bool') return 'yes';
-    return Number(r.value).toLocaleString();
-  }
-  const why = (w) => (w ? `<div class="why ${/^assumed/i.test(w) ? 'assumed' : ''}">${esc(w)}</div>` : '');
-
+  // The draft shows as the same chips as the map bar; clicking one changes the draft before it is saved.
   async function showDraft(el, d, reviseProject) {
     lastDraft = d;
     const { catalog } = await api('/api/projects');
@@ -96,13 +91,11 @@
       <div class="draft">
         <strong>${esc(d.name)}</strong>
         <p style="margin:0" data-taper="3">${esc(d.summary)}</p>
-        <h2 style="margin:4px 0 0">Must have</h2>
-        <ul>${d.spec.requirements.map((r) => `<li><b>${esc(catalog.requirements[r.field].label)}:</b> ${esc(valueText(r, catalog))}${why(r.why)}</li>`).join('') || '<li class="muted">None</li>'}</ul>
-        <h2 style="margin:4px 0 0">Nice to have</h2>
-        <ul>${d.spec.preferences.map((p) => `<li><b>${esc(catalog.preferences[p.field].label)}</b>${why(p.why)}</li>`).join('')}</ul>
+        <div id="dChips" class="critChips" role="group" aria-label="What this draft looks for"></div>
+        <p class="muted" style="margin:0;font-size:12px">Click any of these to change it before you save.</p>
         ${d.questions.length ? `<h2 style="margin:4px 0 0">Questions</h2><ul>${d.questions.map((q) => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
-        ${d.unsupported.length ? `<h2 style="margin:4px 0 0">Not applied yet</h2><p class="muted" style="margin:0;font-size:12px">Paydirt can't filter on these yet:</p><ul>${d.unsupported.map((q) => `<li>${esc(q)}</li>`).join('')}</ul>` : ''}
-        ${d.errors.length ? `<p class="warn">${d.errors.map(esc).join(' ')}</p>` : ''}
+        ${d.unsupported.length ? `<p class="muted" style="margin:0;font-size:12px">Not something Paydirt can check yet: ${d.unsupported.map(esc).join('; ')}.</p>` : ''}
+        ${d.errors.length ? '<p class="warn">Part of the brief couldn\'t be turned into a chip. Check the chips above, or add more detail and draft again.</p>' : ''}
         <label>Project name <input id="dName" type="text" value="${esc(reviseProject ? reviseProject.name : d.name)}"></label>
         <div class="btnRow">
           ${reviseProject ? `<button id="dRevise" type="button">Save as new version of “${esc(reviseProject.name)}”</button>` : ''}
@@ -112,17 +105,22 @@
         <p id="dMsg" class="msg"></p>
       </div>`;
     window.paydirtTaper.apply(el);
+    window.paydirtCriteria.draft($('dChips'), d, catalog);
     const apply = async (asRevision) => {
-      if (d.errors.length && !d.spec.preferences.length) return;
       $('dMsg').className = 'msg'; $('dMsg').textContent = 'Saving…';
       try {
         const body = { name: $('dName').value.trim() || d.name, brief: d.brief, spec: d.spec, source, changeNote: `Drafted from ${source === 'markdown' ? 'a brief' : 'an interview'}` };
         const saved = asRevision
-          ? await api(`/api/projects/${reviseProject.id}`, { method: 'PUT', body })
+          ? await window.paydirtCriteria.request(`/api/projects/${reviseProject.id}`, { method: 'PUT', body: { ...body, baseVersion: reviseProject.spec_version } })
           : await api('/api/projects', { method: 'POST', body });
         await window.paydirtProjects.reload(saved.id);
         $('dMsg').textContent = asRevision ? `Saved as version ${saved.spec_version}.` : 'Project created. The list on the left now ranks for it.';
-      } catch (err) { $('dMsg').className = 'msg err'; $('dMsg').textContent = err.message; }
+      } catch (err) {
+        $('dMsg').className = 'msg err';
+        $('dMsg').textContent = err.status === 409
+          ? `A teammate changed “${reviseProject.name}” since you started. Your draft is still here: save it as a new project, or draft again to build on their version.`
+          : err.message;
+      }
     };
     if (reviseProject) $('dRevise').onclick = () => apply(true);
     $('dCreate').onclick = () => apply(false);
