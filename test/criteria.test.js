@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeSpec, compileSpec } from '../src/spec.js';
+import { normalizeSpec, compileSpec, failedRequirements, failedChecks } from '../src/spec.js';
 import { specToChips, applyChipEdit } from '../src/chips.js';
 
 // Field House's stored spec (production, Nov 21 2026).
@@ -85,4 +85,38 @@ test('pending criteria keep known keys and reject unknown ones', () => {
   assert.deepEqual(ok.spec.pending, [{ key: 'drive_time', value: 'Within 30 min of Redmond' }]);
   const bad = normalizeSpec({ ...FIELD_HOUSE, pending: [{ key: 'teleport', value: 'x' }] });
   assert.ok(bad.errors.length > 0);
+});
+
+// Search reaches sites the criteria hide; each comes back with the reason it is hidden.
+const row = (over = {}) => ({ acres: 26.3, sports_verdict: 'permitted', city: null, postal_city: 'REDMOND', present_use: 'Vacant(Single-family)',
+  years_held: 25, signals: '[]', out_of_state: false, absentee: false, tags: '[]', hh200k_10mi: 50000, land_value: 1000000, ...over });
+
+test('a site outside 5–80 acres is hidden by size', () => {
+  const fails = failedChecks(spec(), row({ acres: 3.2 }));
+  assert.deepEqual(fails.map((f) => f.field), ['acres']);
+  assert.match(fails[0].reason, /acres/i);
+  assert.deepEqual(failedRequirements(spec(), row({ acres: 3.2 })), [fails[0].reason]);
+  assert.deepEqual(failedChecks(spec(), row()), []);
+});
+
+test('a Must "likely to sell" chip hides sites without the chosen signs', () => {
+  const s = { ...spec(), requirements: [...spec().requirements, { field: 'owner_signals', value: ['held_20y'], why: '' }] };
+  const fails = failedChecks(s, row({ years_held: 3 }));
+  assert.deepEqual(fails.map((f) => f.field), ['owner_signals']);
+  assert.match(fails[0].reason, /likely to sell/i);
+  assert.deepEqual(failedChecks(s, row({ years_held: 25 })), []);
+});
+
+test('owner signals in JS mirror the SQL conditions', () => {
+  const must = (keys) => ({ ...spec(), requirements: [{ field: 'owner_signals', value: keys, why: '' }] });
+  const passes = (keys, r) => failedChecks(must(keys), row(r)).length === 0;
+  assert.equal(passes(['held_20y'], { years_held: 30 }), false); // 30+ is the other bucket
+  assert.equal(passes(['held_30y'], { years_held: 30 }), true);
+  assert.equal(passes(['held_30y'], { years_held: null }), false);
+  assert.equal(passes(['recently_inherited'], { signals: '["Recently inherited (2024)"]' }), true);
+  assert.equal(passes(['inherited'], { signals: '["Recently inherited (2024)"]' }), false);
+  assert.equal(passes(['inherited'], { signals: ['Inherited in 1998'] }), true);
+  assert.equal(passes(['absentee'], { absentee: true, out_of_state: true }), false);
+  assert.equal(passes(['absentee'], { absentee: true, out_of_state: null }), true);
+  assert.equal(passes(['out_of_state', 'no_market_sale'], { signals: '["No market sale on record"]' }), true);
 });

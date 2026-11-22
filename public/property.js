@@ -67,9 +67,11 @@ window.paydirtProperty = (() => {
     dlg.showModal();
     await ensureMap();
     map.resize();
-    let c;
-    try { c = await api(`/api/projects/${projectId}/candidates/${encodeURIComponent(pin)}`); }
-    catch (e) { dlg.querySelector('#pmDetail').innerHTML = `<p class="msg err">${esc(e.message)}</p>`; return; }
+    let c, criteria;
+    try {
+      // The project's chips and the catalog, for the "Why it scores" checklist.
+      [c, criteria] = await Promise.all([api(`/api/projects/${projectId}/candidates/${encodeURIComponent(pin)}`), api('/api/projects')]);
+    } catch (e) { dlg.querySelector('#pmDetail').innerHTML = `<p class="msg err">${esc(e.message)}</p>`; return; }
     if (current?.pin !== pin) return;
     current.saved = Boolean(c.saved);
     paintSave();
@@ -79,14 +81,12 @@ window.paydirtProperty = (() => {
     map.getSource('parcel').setData({ type: 'Feature', geometry: c.geometry, properties: {} });
     const b = new maplibregl.LngLatBounds(); eachCoord(c.geometry, (x) => b.extend(x));
     map.fitBounds(b, { padding: 70, maxZoom: 17, duration: 0 });
-    render(c);
+    render(c, criteria.projects.find((p) => p.id === Number(projectId)) ?? { chips: [] }, criteria.catalog);
     api(`/api/candidates/${encodeURIComponent(pin)}/profile`).then((r) => { if (current?.pin === pin) renderOwnership(r.ownership); })
       .catch((e) => { const el = document.getElementById('pmOwn'); if (el) el.textContent = e.message; });
   }
 
-  const bar = (label, v) => `<span>${label}</span><span class="bar"><i style="width:${v}%;background:${paydirtScore.scoreColor(v)}"></i></span><span>${v}</span>`;
-
-  function render(c) {
+  function render(c, project, catalog) {
     const v = VERDICT[c.sports_verdict] ?? VERDICT.unknown;
     const landPerAc = c.land_value && c.acres ? c.land_value / c.acres : null;
     const el = dlg.querySelector('#pmDetail');
@@ -97,7 +97,7 @@ window.paydirtProperty = (() => {
         <p id="pmMsg" class="msg"></p>
       </section>
       ${c.hiddenBecause?.length ? `<p class="warn">No longer fits this project: ${c.hiddenBecause.map(esc).join('; ')}. It stays saved until you remove it.</p>` : ''}
-      <section><h2>Why it scores ${c.score}</h2><div class="bars">${c.subscores.map((s) => bar(`${esc(s.label)} <span class="muted">${Math.round(s.share * 100)}%</span>`, s.value)).join('')}</div><p class="muted small">Each line is how well it meets one thing the project wants (100 = fully). The percentage is how much that thing counts.</p></section>
+      <section><h2>Why it scores ${c.score}</h2>${paydirtCriteria.checklistHtml(project, c, catalog)}</section>
       <section><h2>On this site</h2>
         <div class="tagRow">${(c.tags ?? []).map((t) => `<span class="pill ${TAG_TONE[t] ?? ''}">${esc(TAG_TEXT[t] ?? t)}</span>`).join('') || '<span class="muted">No site tags.</span>'}</div>
         <dl><dt>Owner type</dt><dd>${esc(OWNER_TEXT[c.owner_type] ?? 'Unknown')}</dd><dt>Building value</dt><dd>${c.impr_value != null && c.acres ? `${usd(c.impr_value / c.acres)} per acre` : '—'}</dd></dl>

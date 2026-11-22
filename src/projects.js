@@ -1,5 +1,5 @@
 import { all, one, run, pool } from './db.js';
-import { normalizeSpec, compileSpec, failedRequirements } from './spec.js';
+import { normalizeSpec, compileSpec, failedChecks } from './spec.js';
 import { newId } from './ids.js';
 import { logEvent } from './identity.js';
 
@@ -138,20 +138,24 @@ export async function orgSaved(orgUid, limit = 200) {
 
 // ---------- Candidates scored for a project ----------
 const LIST_COLS = `c.pin, c.property_uid, c.address, c.city, c.postal_city, c.acres, c.zoning, c.sports_verdict, c.present_use,
-  c.years_held, c.signals, c.hh200k_10mi, c.share200k_10mi, c.land_value, c.lat, c.lng, c.tags, c.businesses, c.owner_type`;
+  c.years_held, c.signals, c.hh200k_10mi, c.share200k_10mi, c.land_value, c.lat, c.lng, c.tags, c.businesses, c.owner_type,
+  c.out_of_state, c.absentee`;
 
 // filters: ad-hoc narrowing from the map/list (not saved to the project).
+// With search text (filters.area) the project's requirements don't filter: the search finds any parcel,
+// and each one the requirements would hide comes back with hiddenBecause (plain reasons) and hiddenFields.
 export async function projectCandidates(project, filters = {}) {
   const k = compileSpec(project.spec);
-  const where = ['c.excluded IS NULL', ...k.where];
-  const params = [...k.whereParams];
+  const searching = Boolean(String(filters.area ?? '').trim());
+  const where = ['c.excluded IS NULL', ...(searching ? [] : k.where)];
+  const params = searching ? [] : [...k.whereParams];
   const add = (sql, ...v) => { where.push(sql); params.push(...v); };
   if (filters.minAcres) add('c.acres >= ?', Number(filters.minAcres));
   if (filters.maxAcres) add('c.acres <= ?', Number(filters.maxAcres));
   if (filters.verdict) add('c.sports_verdict = ANY(?)', String(filters.verdict).split(','));
   // Search box: address, parcel number (dashes optional) or town.
-  if (filters.area) {
-    const q = `%${filters.area}%`, digits = String(filters.area).replace(/\D/g, '');
+  if (searching) {
+    const q = `%${String(filters.area).trim()}%`, digits = String(filters.area).replace(/\D/g, '');
     add(`(COALESCE(c.address, '') ILIKE ? OR COALESCE(c.city, '') ILIKE ? OR COALESCE(c.postal_city, '') ILIKE ?${digits.length >= 4 ? ' OR c.pin LIKE ?' : ''})`,
       q, q, q, ...(digits.length >= 4 ? [`%${digits}%`] : []));
   }
@@ -176,10 +180,15 @@ export async function projectCandidates(project, filters = {}) {
     type: 'FeatureCollection', total,
     project: { id: project.id, name: project.name, version: project.spec_version },
     subscores: k.subscores,
-    features: rows.filter((r) => r.lat != null).map(({ lat, lng, signals, tags, businesses, ...p }) => ({
-      type: 'Feature', id: p.pin, geometry: { type: 'Point', coordinates: [lng, lat] },
-      properties: { ...p, signals: JSON.parse(signals ?? '[]'), tags: JSON.parse(tags ?? '[]'), businessCount: JSON.parse(businesses ?? '[]').length },
-    })),
+    features: rows.filter((r) => r.lat != null).map((row) => {
+      const { lat, lng, signals, tags, businesses, ...p } = row;
+      const fails = searching ? failedChecks(project.spec, row) : [];
+      return {
+        type: 'Feature', id: p.pin, geometry: { type: 'Point', coordinates: [lng, lat] },
+        properties: { ...p, signals: JSON.parse(signals ?? '[]'), tags: JSON.parse(tags ?? '[]'), businessCount: JSON.parse(businesses ?? '[]').length,
+          hiddenBecause: fails.map((f) => f.reason), hiddenFields: fails.map((f) => f.field) },
+      };
+    }),
   };
 }
 
@@ -191,11 +200,12 @@ export async function projectCandidate(project, pin) {
     FROM candidates c LEFT JOIN project_properties r ON r.property_uid = c.property_uid AND r.project_id = ${Number(project.id)} WHERE c.pin = ?) s`;
   const c = await one(sql, [...k.scoreParams, pin]);
   if (!c) return null;
-  const fails = failedRequirements(project.spec, c);
+  const fails = c.excluded ? [{ field: 'excluded', reason: c.excluded }] : failedChecks(project.spec, c);
   return {
     ...c, geometry: JSON.parse(c.geometry_json), geometry_json: undefined, signals: JSON.parse(c.signals ?? '[]'),
     tags: JSON.parse(c.tags ?? '[]'), businesses: JSON.parse(c.businesses ?? '[]'),
     subscores: k.subscores.map((s) => ({ ...s, value: c[s.key] })),
-    hiddenBecause: c.excluded ? [c.excluded] : fails,
+    // hiddenFields[i] is the spec field behind hiddenBecause[i] ('excluded' when the parcel is out of every search).
+    hiddenBecause: fails.map((f) => f.reason), hiddenFields: fails.map((f) => f.field),
   };
 }

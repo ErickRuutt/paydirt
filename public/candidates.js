@@ -8,7 +8,7 @@
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } } };
   const VERDICT_LABEL = { permitted: 'Permitted', conditional: 'Conditional use', prohibited: 'Not allowed', unknown: 'Unknown' };
   const VERDICT_PILL = { permitted: 'pass', conditional: 'review', prohibited: 'fail', unknown: 'unknown' };
-  const { chip: scoreChip, mapExpr: scoreMapExpr, scoreColor } = window.paydirtScore; // one ramp: chips, dots, legend, bars
+  const { chip: scoreChip, mapExpr: scoreMapExpr } = window.paydirtScore; // one ramp: chips, dots, legend, bars
   const fmtPin = (pin) => `${String(pin).slice(0, 6)}-${String(pin).slice(6)}`;
   const siteTitle = (p) => p.address || `Parcel ${fmtPin(p.pin)}`;
   // The facts a scanner needs, as at most three short labels: zoning, what's on the site, the owner.
@@ -20,13 +20,15 @@
     if (site) out.push(`<span class="pill ${site[1]}">${site[2]}</span>`);
     const sig = p.signals.find((s) => /inherit/.test(s)) ? 'Inherited' : p.years_held >= 20 ? `Held ${Math.floor(p.years_held)}y` : p.signals.find((s) => /no market sale/.test(s)) ? 'No sale on record' : null;
     if (sig) out.push(`<span class="pill">${sig}</span>`);
-    if (p.status !== 'new') out.push(`<span class="pill ${p.status}">${esc(p.status)}</span>`);
+    if (p.status !== 'new') out.push(`<span class="pill ${p.status}">${esc(STATUS_TEXT[p.status] ?? p.status)}</span>`);
     return out.join('');
   }
   const TAG_TEXT = { 'vacant-land': 'Vacant land', 'operating-business': 'Business operating', 'anchor-tenant': 'Major anchor tenant', 'leased-to-business': 'Leased to a business',
     'company-owned': 'Company-owned', 'closing-tenant': 'Closing tenant', 'possible-empty-building': 'Possible empty building', 'tax-bill-to-business': 'Tax bill paid by a business' };
   const TAG_TONE = { 'vacant-land': 'pass', 'operating-business': 'fail', 'anchor-tenant': 'fail', 'leased-to-business': 'fail', 'closing-tenant': 'review', 'possible-empty-building': 'review' };
   const OWNER_TEXT = { individual: 'Individual', trust: 'Family trust or estate', llc: 'LLC', company: 'Company', government: 'Government' };
+  // Stored status values stay as they are; 'rejected' reads as Passed.
+  const STATUS_TEXT = { new: 'Saved', shortlist: 'Shortlist', contacted: 'Contacted', rejected: 'Passed' };
   const VERDICT_SHORT = { permitted: 'Permitted', conditional: 'Conditional', prohibited: 'Not allowed', unknown: 'Zoning unknown' };
   const where = (p) => p.city ? titleCase(p.city) : `Unincorporated${p.postal_city ? ' · ' + titleCase(p.postal_city) : ''}`;
   const titleCase = (s) => String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -72,9 +74,11 @@
 
   // ---------- Data ----------
   let pending = null;
-  // The project is the filter; the bar only adds the search text. Passed sites stay off the map.
+  // The project is the filter; the bar only adds the search text. Passed sites stay off the map
+  // unless "Show passed sites" is on under Layers.
+  const hidePassed = () => !$('lyPassed')?.checked;
   async function loadCandidates() {
-    const q = new URLSearchParams({ hidePassed: 'true' });
+    const q = new URLSearchParams({ hidePassed: String(hidePassed()) });
     const area = $('cArea').value.trim(); if (area) q.set('area', area);
     const key = q.toString() + '|' + project.id + '|' + project.spec_version;
     pending = key;
@@ -86,13 +90,15 @@
     renderCandList();
   }
   let t = null;
+  if ($('lyPassed')) $('lyPassed').onchange = () => loadCandidates().catch(showErr);
   $('cArea').oninput = () => { clearTimeout(t); t = setTimeout(() => loadCandidates().catch(showErr), 300); };
   $('candForm').onsubmit = (e) => { e.preventDefault(); clearTimeout(t); loadCandidates().catch(showErr); };
   const showErr = (e) => { $('cCount').textContent = ''; $('cList').innerHTML = `<li class="msg err">${esc(e.message)}</li>`; };
 
   function renderCandList() {
     const shown = cand.features.slice(0, 150);
-    $('cCount').textContent = `· ${cand.total.toLocaleString()} fit${cand.total > shown.length ? `, best ${shown.length} shown` : ''}`;
+    const searching = Boolean($('cArea').value.trim());
+    $('cCount').textContent = `· ${cand.total.toLocaleString()} ${searching ? 'found' : 'fit'}${cand.total > shown.length ? `, best ${shown.length} shown` : ''}`;
     $('cList').innerHTML = shown.map(({ properties: p }) => `
       <li data-pin="${esc(p.pin)}" class="row ${p.pin === candSel ? 'sel' : ''}">
         ${scoreChip(p.score)}
@@ -100,9 +106,10 @@
           <span class="t">${esc(siteTitle(p))}</span>
           <span class="m">${fmt.ac(p.acres)} · ${esc(p.zoning || 'No zone')} · ${esc(where(p))}</span>
           <span class="facts">${rowFacts(p)}</span>
+          ${p.hiddenFields?.length ? `<span class="hiddenWhy" title="${esc(p.hiddenBecause.join('; '))}">Hidden: ${esc(Criteria.hiddenNames(p.hiddenFields, catalog).join(', '))}</span>` : ''}
         </div>
         <button type="button" class="rowStar" data-star="${esc(p.pin)}" aria-pressed="${p.saved ? 'true' : 'false'}" title="${p.saved ? 'Saved to this project' : 'Save to this project'}" aria-label="${p.saved ? 'Unsave' : 'Save'} ${esc(siteTitle(p))}">${p.saved ? '★' : '☆'}</button>
-      </li>`).join('') || '<li class="muted">No sites match this project.</li>';
+      </li>`).join('') || `<li class="muted">${searching ? 'Nothing found for that search.' : 'No sites match this project.'}</li>`;
     window.paydirtTaper.apply($('cList'));
   }
   $('cList').onclick = (e) => {
@@ -189,7 +196,7 @@
   const conflicted = (p) => afterSave(p);
 
   function openEditor(key, btn) {
-    Criteria.edit({ project, catalog, key, nowCount: () => ($('cArea').value.trim() ? null : cand.total), returnFocus: () => chipButton(key) ?? btn, onSaved: afterSave, onConflict: conflicted });
+    Criteria.edit({ project, catalog, key, hidePassed: hidePassed(), nowCount: () => ($('cArea').value.trim() ? null : cand.total), returnFocus: () => chipButton(key) ?? btn, onSaved: afterSave, onConflict: conflicted });
   }
 
   $('critUndo').onclick = async () => {
@@ -301,16 +308,13 @@
     api(`/api/candidates/${encodeURIComponent(pin)}/profile`).then((r) => renderProfile(r, pin)).catch((e) => { const el = $('ownOut'); if (el) el.textContent = e.message; });
   }
 
-  const bar = (label, v) => `<span>${label}</span><span class="bar"><i style="width:${v}%;background:${scoreColor(v)}"></i></span><span>${v}</span>`;
-
   function renderCandidate(c) {
     const landPerAc = c.land_value && c.acres ? c.land_value / c.acres : null;
     $('detailBody').innerHTML = `
       <h3>${esc(c.address || 'No site address')}</h3>
       <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} ${scoreChip(c.score)}</p>
       ${c.hiddenBecause.length ? `<p class="warn" data-taper="2">Not in this project's results: ${c.hiddenBecause.map(esc).join('; ')}</p>` : ''}
-      <section><h2>Why it scores ${c.score}</h2><div class="bars">${c.subscores.map((s) => bar(esc(s.label), s.value)).join('')}</div>
-        <p class="muted" style="font-size:12px;margin:0">Each line is how well it meets one thing ${esc(project.name)} wants (100 = fully).</p></section>
+      <section><h2>Why it scores ${c.score}</h2>${Criteria.checklistHtml(project, c, catalog)}</section>
       <section><h2>On this site</h2>
         <div class="tagRow">${(c.tags ?? []).map((t) => `<span class="pill ${TAG_TONE[t] ?? ''}">${esc(TAG_TEXT[t] ?? t)}</span>`).join('') || '<span class="muted">No site tags.</span>'}</div>
         <dl><dt>Owner type</dt><dd>${esc(OWNER_TEXT[c.owner_type] ?? 'Unknown')}</dd><dt>Building value</dt><dd>${c.impr_value != null && c.acres ? `${fmt.usd(c.impr_value / c.acres)} per acre` : '—'}</dd></dl>
@@ -336,7 +340,7 @@
         <div id="cEnrichOut"></div>
         <button id="cEnrichBtn" type="button">${c.enrichment ? 'Check again' : 'Check slope, wetlands & flood'} · $0.02</button><p id="cEnrichMsg" class="msg"></p></section>
       <section><h2>Review</h2>
-        <select id="cRevStatus">${['new', 'shortlist', 'contacted', 'rejected'].map((s) => `<option ${c.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        <select id="cRevStatus" aria-label="Status">${Object.entries(STATUS_TEXT).map(([s, t]) => `<option value="${s}" ${c.status === s ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <textarea id="cRevNotes" placeholder="Notes: site visit, owner contact, broker intel…">${esc(c.notes)}</textarea>
         <button id="cRevSave" class="secondary" type="button">Save review</button><p id="cRevMsg" class="msg"></p></section>`;
 

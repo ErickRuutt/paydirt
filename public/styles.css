@@ -691,3 +691,18 @@ body.map #map { margin-top: var(--mapbar); height: calc(100vh - var(--mapbar)); 
 .critRename { display: flex; align-items: center; gap: 6px; }
 .critRename input { width: 260px; max-width: 100%; font: 800 18px var(--display); }
 @media (max-width: 1180px) { .critProj { max-width: 100%; } }
+
+/* Why it scores (checklist), hidden search results, Saved page status filter */
+.whyList { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.whyList li { display: grid; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.whyList li:last-child { border-bottom: 0; padding-bottom: 0; }
+.whyName { font: 600 13px var(--display); color: var(--fg); }
+.whyPart { font-size: 13px; color: var(--fg); }
+.whyKind { display: inline-block; min-width: 7.5em; color: var(--muted); font-size: 12px; }
+.whyPart.ok > [aria-hidden], .whyPart.full > [aria-hidden] { color: var(--ok-fg); }
+.whyPart.no > [aria-hidden] { color: var(--bad-fg); }
+.whyList .vh, .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.hiddenWhy { font-size: 12px; color: var(--muted); }
+.statusFilter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.statusFilter button { background: transparent; color: var(--fg); border: 1px solid var(--line-strong); }
+.statusFilter button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }

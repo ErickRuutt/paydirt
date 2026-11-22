@@ -226,7 +226,7 @@ function renderDetail(p) {
       <dt>Last sale</dt><dd>${fmt.usd(p.sale_price)} ${esc(p.sale_date || '')}</dd>
       <dt>Last transfer</dt><dd>${esc(p.last_transfer_date || '—')}</dd></dl></section>
     <section><h2>Review</h2>
-      <select id="status">${['new', 'shortlist', 'rejected', 'contacted'].map((s) => `<option ${p.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+      <select id="status">${[['new', 'Saved'], ['shortlist', 'Shortlist'], ['contacted', 'Contacted'], ['rejected', 'Passed']].map(([s, t]) => `<option value="${s}" ${p.status === s ? 'selected' : ''}>${t}</option>`).join('')}</select>
       <textarea id="notes" placeholder="Notes: site visit, owner contact, broker intel…">${esc(p.notes)}</textarea>
       <button id="saveReview" class="secondary" type="button">Save review</button></section>
     <section><h2>Enrich</h2>

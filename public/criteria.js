@@ -6,6 +6,8 @@
      paydirtCriteria.history({ project, me, catalog, returnFocus, onSaved, onConflict })
      paydirtCriteria.restore(project, spec)  → saved project (throws err.status 409 with err.body.project when stale)
      paydirtCriteria.draft(el, holder, catalog)  shows holder.spec (not saved yet) as chips; edits change holder.spec in memory
+     paydirtCriteria.checklist(el, project, candidate, catalog)  "Why it scores N": one row per set chip
+     paydirtCriteria.hiddenNames(hiddenFields, catalog)  short chip names for a search result the criteria hide
    `project` carries id, spec_version, spec and chips as returned by /api/projects; `catalog` is that response's catalog. */
 window.paydirtCriteria = (() => {
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -567,5 +569,66 @@ window.paydirtCriteria = (() => {
     paint();
   }
 
-  return { render, describe, edit, history, restore, request, showPending, draft };
+  // ---------- Why a parcel scores what it does ----------
+  // Short chip names for "Hidden: size" labels on search results.
+  const SHORT = { size: 'size', where: 'where', zoning: 'zoning', site: "what's on the site", sell: 'likely to sell', families: 'families nearby', price: 'land price', tagged: 'only sites tagged' };
+  const chipOfField = (catalog, field) => catalog.criteria.chips.find((d) => d.must.includes(field));
+  function hiddenNames(fields, catalog) {
+    const out = [];
+    for (const f of fields ?? []) {
+      const name = f === 'excluded' ? 'out of every search' : SHORT[chipOfField(catalog, f)?.key] ?? f;
+      if (!out.includes(name)) out.push(name);
+    }
+    return out;
+  }
+
+  const VERDICT_TEXT = { permitted: 'Permitted', conditional: 'Allowed with a permit', unknown: 'Not read yet', prohibited: 'Not allowed' };
+  const title = (s) => String(s ?? '').toLowerCase().replace(/\b\w/g, (x) => x.toUpperCase());
+  // The parcel's own value for a chip whose Must part it meets.
+  function metValue(ch, c, catalog) {
+    switch (ch.key) {
+      case 'size': return c.acres == null ? 'Size unknown' : `${Number(c.acres).toLocaleString(undefined, { maximumFractionDigits: 1 })} acres`;
+      case 'where': return c.city ? title(c.city) : `Unincorporated${c.postal_city ? ` · ${title(c.postal_city)}` : ''}`;
+      case 'zoning': return VERDICT_TEXT[c.sports_verdict ?? 'unknown'] ?? c.sports_verdict;
+      case 'site': return ch.must.vacant ? (c.present_use || 'Vacant land') : mustText(ch, catalog);
+      case 'sell': return (c.signals ?? []).slice(0, 2).join(', ') || 'Yes';
+      case 'families': return `${fmtN(c.hh200k_10mi ?? 0)} households earning $200k+`;
+      case 'price': return c.land_value != null && c.acres ? `$${fmtN(Math.round(c.land_value / c.acres))} an acre` : 'Not known';
+      case 'tagged': return (ch.must.tags_include ?? []).filter((t) => (c.tags ?? []).includes(t)).map((t) => tagLabel(catalog, t)).join(', ');
+    }
+    return 'Yes';
+  }
+  const NICE = [[80, 'full', '●', 'Fully met'], [40, 'part', '◐', 'Partly met'], [-Infinity, 'none', '○', 'Not met']];
+
+  // One row per chip the project sets: Must part met (✓ with the parcel's value) or not (✗ with why);
+  // Nice part fully, partly or not met. `c` is a candidate from GET /api/projects/:id/candidates/:pin.
+  function checklistHtml(project, c, catalog) {
+    const chips = (project.chips ?? []).filter((ch) => ch.must || ch.nice);
+    if (!chips.length) return '<p class="muted small">This project doesn’t ask for anything yet, so every site fits.</p>';
+    const failed = new Map((c.hiddenFields ?? []).map((f, i) => [f, c.hiddenBecause[i]]));
+    const rows = chips.map((ch) => {
+      const def = catalog.criteria.chips.find((d) => d.key === ch.key) ?? { must: [], nice: [] };
+      const parts = [];
+      if (ch.must) {
+        const why = def.must.filter((f) => failed.has(f)).map((f) => String(failed.get(f)).replace(/^[^:]+:\s*/, ''));
+        parts.push(why.length
+          ? `<span class="whyPart no"><span class="whyKind">Must</span><span aria-hidden="true">✗</span> <span class="vh">Not met:</span> ${esc(why.join('; '))}</span>`
+          : `<span class="whyPart ok"><span class="whyKind">Must</span><span aria-hidden="true">✓</span> <span class="vh">Met:</span> ${esc(metValue(ch, c, catalog))}</span>`);
+      }
+      if (ch.nice) {
+        const subs = (c.subscores ?? []).filter((s) => def.nice.includes(s.field) && s.value != null);
+        if (subs.length) {
+          const w = subs.reduce((a, s) => a + s.weight, 0);
+          const v = w > 0 ? subs.reduce((a, s) => a + s.value * s.weight, 0) / w : subs.reduce((a, s) => a + s.value, 0) / subs.length;
+          const [, cls, sym, text] = NICE.find(([min]) => v >= min);
+          parts.push(`<span class="whyPart ${cls}"><span class="whyKind">Nice · ${esc(word(catalog, ch.nice.importance))}</span><span aria-hidden="true">${sym}</span> ${text}</span>`);
+        }
+      }
+      return `<li><span class="whyName">${esc(ch.label)}</span>${parts.join('')}</li>`;
+    });
+    return `<ul class="whyList">${rows.join('')}</ul>`;
+  }
+  function checklist(el, project, c, catalog) { el.innerHTML = checklistHtml(project, c, catalog); }
+
+  return { render, describe, edit, history, restore, request, showPending, draft, checklist, checklistHtml, hiddenNames };
 })();
