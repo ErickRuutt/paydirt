@@ -34,7 +34,7 @@
       <div class="startActions">
         <button id="startGo" type="button">Draft my project</button>
         <label class="fileLink"><input id="startFile" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown"> or upload a brief</label>
-        <a class="expert" href="map.html?new=form">Set criteria yourself →</a>
+        <button type="button" class="expert linkish" data-blank>Set criteria yourself →</button>
       </div>
       <p id="startMsg" class="msg" role="status"></p>
       <ol class="howItWorks"><li><b>Describe</b> the site in your own words.</li><li><b>See</b> every parcel in the county ranked for it.</li><li><b>Save</b> the best with ☆ and track each owner.</li></ol>
@@ -57,6 +57,7 @@
 <script src="taper.js"></script>
 <script src="pages.js"></script>
 <script src="property.js"></script>
+<script src="criteria.js"></script>
 <script src="start.js"></script>
 <script>
 (async () => {
@@ -65,7 +66,8 @@
 
   function savedList(id, rows) {
     if (!rows.length) return `<div class="empty"><b>Nothing saved to this project yet</b><p class="muted">Open the map and tap ☆ on a parcel.</p></div>`;
-    return `<ul class="savedList">${rows.map((p) => `<li><button type="button" class="savedRow" data-open="${id}" data-pin="${esc(p.pin)}">
+    return `<ul class="savedList">${rows.map((p, i) => `<li><button type="button" class="savedRow" data-open="${id}" data-pin="${esc(p.pin)}">
+        <span class="rank" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>
         ${p.score != null ? paydirtScore.chip(p.score) : '<span class="score none">–</span>'}
         <span class="rowMain"><span class="t">${esc(siteTitle(p))}</span><span class="m">${ac(p.acres)} · ${esc(p.zoning || 'No zone')} · ${esc(where(p))}</span>
           <span class="facts">${labels(p)}${p.hiddenByCriteria ? '<span class="pill fail">No longer fits</span>' : ''}</span></span>
@@ -100,7 +102,7 @@
     $('projCount').textContent = `${h.projects.length} active · ${h.saved.length} saved`;
     $('projects').innerHTML = h.projects.map((p) => `
       <article class="proj" data-id="${p.id}" data-open="false">
-        <div class="projHead field">
+        <div class="projHead">
           <div class="projMain">
             <div class="card-top"><h3>${esc(p.name)}</h3><span class="lblish">v${p.spec_version}</span></div>
             <p class="brief" data-taper="2">${esc(p.brief || 'No brief yet.')}</p>

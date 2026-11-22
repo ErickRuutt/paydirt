@@ -20,18 +20,26 @@ export const TAG_LABELS = {
 };
 const tagSql = (t) => `c.tags LIKE '%"${t.replace(/[^a-z-]/g, '')}"%'`;
 
+// Each signal as SQL over `candidates c`, and as the same test in JS over a candidates row
+// (`has(text)` is a case-insensitive match against c.signals, like ILIKE). Keep the two in step.
 const SIGNALS = {
-  held_30y: { label: 'Held 30+ years', sql: 'c.years_held >= 30' },
-  held_20y: { label: 'Held 20–30 years', sql: 'c.years_held >= 20 AND c.years_held < 30' },
-  no_market_sale: { label: 'No market sale on record', sql: "c.signals ILIKE '%no market sale%'" },
-  recently_inherited: { label: 'Recently inherited', sql: "c.signals ILIKE '%recently inherited%'" },
-  inherited: { label: 'Inherited (earlier)', sql: "c.signals ILIKE '%inherited%' AND c.signals NOT ILIKE '%recently inherited%'" },
-  family_trust: { label: 'Last transfer family or trust', sql: "c.signals ILIKE '%family or trust%'" },
-  bought_recently: { label: 'Bought within 3 years', sql: "c.signals ILIKE '%bought within 3%'" },
-  out_of_state: { label: 'Owner out of state', sql: 'c.out_of_state' },
-  absentee: { label: 'Owner in another city', sql: '(c.absentee AND NOT COALESCE(c.out_of_state, false))' },
-  mostly_land: { label: 'Little or no building', sql: "c.signals ILIKE '%mostly land%'" },
+  held_30y: { label: 'Held 30+ years', sql: 'c.years_held >= 30', test: (c) => c.years_held != null && c.years_held >= 30 },
+  held_20y: { label: 'Held 20–30 years', sql: 'c.years_held >= 20 AND c.years_held < 30', test: (c) => c.years_held != null && c.years_held >= 20 && c.years_held < 30 },
+  no_market_sale: { label: 'No market sale on record', sql: "c.signals ILIKE '%no market sale%'", test: (c, has) => has('no market sale') },
+  recently_inherited: { label: 'Recently inherited', sql: "c.signals ILIKE '%recently inherited%'", test: (c, has) => has('recently inherited') },
+  inherited: { label: 'Inherited (earlier)', sql: "c.signals ILIKE '%inherited%' AND c.signals NOT ILIKE '%recently inherited%'", test: (c, has) => has('inherited') && !has('recently inherited') },
+  family_trust: { label: 'Last transfer family or trust', sql: "c.signals ILIKE '%family or trust%'", test: (c, has) => has('family or trust') },
+  bought_recently: { label: 'Bought within 3 years', sql: "c.signals ILIKE '%bought within 3%'", test: (c, has) => has('bought within 3') },
+  out_of_state: { label: 'Owner out of state', sql: 'c.out_of_state', test: (c) => c.out_of_state === true },
+  absentee: { label: 'Owner in another city', sql: '(c.absentee AND NOT COALESCE(c.out_of_state, false))', test: (c) => c.absentee === true && !c.out_of_state },
+  mostly_land: { label: 'Little or no building', sql: "c.signals ILIKE '%mostly land%'", test: (c, has) => has('mostly land') },
 };
+const asText = (v) => (typeof v === 'string' ? v : JSON.stringify(v ?? []));
+function hasSignal(c, keys) {
+  const text = asText(c.signals).toLowerCase();
+  const has = (s) => text.includes(s);
+  return keys.some((k) => SIGNALS[k]?.test(c, has));
+}
 
 // Fields a requirement can test.
 export const REQUIREMENT_FIELDS = {
@@ -84,6 +92,15 @@ export const FIELD_HOUSE_SPEC = {
 const num = (v) => (v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 const text = (v, n = 500) => String(v ?? '').slice(0, n);
 
+// Criteria Paydirt can't check yet, with what it uses instead.
+export const PENDING = {
+  drive_time: { label: 'Drive time', instead: 'Paydirt uses the towns you name until drive time is ready.' },
+  buildable: { label: 'Buildable acres', instead: 'Slope, wetlands and flood zones aren\'t checked yet; the paid per-parcel check still works.' },
+  other_use_zoning: { label: 'Zoning for other uses', instead: 'Zoning answers only for sports facilities today.' },
+  listed_for_sale: { label: 'Listed for sale', instead: 'There is no listing data yet.' },
+};
+export const PENDING_KEYS = Object.keys(PENDING);
+
 export function normalizeSpec(input) {
   const errors = [];
   const s = typeof input === 'string' ? JSON.parse(input) : (input ?? {});
@@ -120,7 +137,12 @@ export function normalizeSpec(input) {
     const params = mergeParams(def.params, p.params ?? {});
     out.preferences.push({ field: p.field, weight, params, why: text(p.why) });
   }
-  if (!out.preferences.some((p) => p.weight > 0)) errors.push('Add at least one preference with a weight above 0, or nothing can be ranked.');
+  // Criteria Paydirt can't check yet (drive time, buildable acres…): kept so nothing the user asked for is lost.
+  out.pending = [];
+  for (const [i, x] of (Array.isArray(s.pending) ? s.pending : []).entries()) {
+    if (!PENDING_KEYS.includes(x?.key)) { errors.push(`Not-yet-checked item ${i + 1}: unknown kind "${x?.key}".`); continue; }
+    out.pending.push({ key: x.key, value: text(x.value, 300) });
+  }
   return { spec: out, errors };
 }
 
@@ -203,7 +225,8 @@ export function compileSpec(spec) {
     subs.push({ key, field: p.field, label: PREFERENCE_FIELDS[p.field].label, weight: p.weight, sql: `ROUND(${clamp(`COALESCE(${e}, 0)`)})::int AS ${key}` });
   }
   const totalW = subs.reduce((a, s) => a + s.weight, 0) || 1;
-  let scoreExpr = subs.length ? subs.map((s) => `${s.key} * ${s.weight / totalW}`).join(' + ') : '0';
+  // With no Nice criteria every site that passes the Must criteria is a full match.
+  let scoreExpr = subs.length && subs.some((x) => x.weight > 0) ? subs.map((s) => `${s.key} * ${s.weight / totalW}`).join(' + ') : '100';
   // Cap: a site with a business running on it (and no sign it's closing) never ranks above the cap.
   if (capWhenOperating != null) scoreExpr = `LEAST(${scoreExpr}, CASE WHEN tags LIKE '%"operating-business"%' AND tags NOT LIKE '%"closing-tenant"%' THEN ${Number(capWhenOperating)} ELSE 100 END)`;
   return {
@@ -215,24 +238,48 @@ export function compileSpec(spec) {
   };
 }
 
-// Plain-language reasons a parcel fails a project's requirements (for the detail panel).
-export function failedRequirements(spec, c) {
+// Which requirements a parcel fails, each as { field, reason } in plain words (search results and the detail panel).
+export function failedChecks(spec, c) {
   const out = [];
+  const tags = asText(c.tags);
+  const tagged = (t) => tags.includes(`"${t}"`);
   for (const r of spec.requirements) {
     let ok = true;
     switch (r.field) {
-      case 'acres': ok = (r.value[0] == null || c.acres >= r.value[0]) && (r.value[1] == null || c.acres <= r.value[1]); break;
+      case 'acres': ok = c.acres != null && (r.value[0] == null || c.acres >= r.value[0]) && (r.value[1] == null || c.acres <= r.value[1]); break;
       case 'zoning.sports_facility': ok = r.value.includes(c.sports_verdict ?? 'unknown'); break;
       case 'jurisdiction': ok = r.value.length !== 1 || (r.value[0] === 'city') === Boolean(c.city); break;
       case 'area': ok = r.value.some((a) => `${c.city ?? ''} ${c.postal_city ?? ''}`.toLowerCase().includes(a.toLowerCase())); break;
       case 'hh200k_10mi': ok = (c.hh200k_10mi ?? 0) >= r.value; break;
-      case 'land_value_per_acre': ok = c.acres ? c.land_value / c.acres <= r.value : false; break;
+      case 'land_value_per_acre': ok = c.acres && c.land_value != null ? c.land_value / c.acres <= r.value : false; break;
       case 'vacant': ok = /^vacant/i.test(c.present_use ?? ''); break;
-      case 'owner_signals': ok = true; break; // checked in SQL; rarely the reason someone opens a parcel
-      case 'tags_exclude': ok = !r.value.some((t) => (c.tags ?? '').includes(`"${t}"`)); break;
-      case 'tags_include': ok = r.value.some((t) => (c.tags ?? '').includes(`"${t}"`)); break;
+      case 'owner_signals': ok = hasSignal(c, r.value); break;
+      case 'tags_exclude': ok = !r.value.some(tagged); break;
+      case 'tags_include': ok = r.value.some(tagged); break;
     }
-    if (!ok) out.push(`${REQUIREMENT_FIELDS[r.field].label}${r.why ? ` — ${r.why}` : ''}`);
+    if (!ok) out.push({ field: r.field, reason: reasonFor(r, c, tagged) });
   }
   return out;
 }
+
+const n1 = (x) => Number(x).toLocaleString('en-US', { maximumFractionDigits: 1 });
+const between = ([lo, hi]) => (lo != null && hi != null ? `${n1(lo)}–${n1(hi)}` : lo != null ? `${n1(lo)}+` : `up to ${n1(hi)}`);
+const VERDICT_WORDS = { permitted: 'permitted', conditional: 'allowed with a permit', unknown: 'not read yet', prohibited: 'not allowed' };
+function reasonFor(r, c, tagged) {
+  switch (r.field) {
+    case 'acres': return `Size: ${c.acres == null ? 'unknown' : n1(c.acres)} acres, outside ${between(r.value)}`;
+    case 'zoning.sports_facility': return `Zoning: ${VERDICT_WORDS[c.sports_verdict ?? 'unknown'] ?? c.sports_verdict}`;
+    case 'jurisdiction': return r.value[0] === 'city' ? 'Where: not inside a city' : 'Where: inside a city';
+    case 'area': return `Where: not in ${r.value.join(', ')}`;
+    case 'hh200k_10mi': return `Families nearby: fewer than ${n1(r.value)} households earning $200k+`;
+    case 'land_value_per_acre': return `Land price: over $${n1(r.value)} an acre`;
+    case 'vacant': return "What's on the site: not vacant land";
+    case 'owner_signals': return 'Likely to sell: none of the signs you picked';
+    case 'tags_exclude': return `What's on the site: ${r.value.filter(tagged).map((t) => TAG_LABELS[t].toLowerCase()).join(', ')}`;
+    case 'tags_include': return `Only sites tagged: not ${r.value.map((t) => TAG_LABELS[t].toLowerCase()).join(' or ')}`;
+  }
+  return REQUIREMENT_FIELDS[r.field]?.label ?? r.field;
+}
+
+// The same reasons as plain strings.
+export const failedRequirements = (spec, c) => failedChecks(spec, c).map((f) => f.reason);

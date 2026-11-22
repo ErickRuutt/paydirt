@@ -4,11 +4,11 @@
 (() => {
   let cand = { type: 'FeatureCollection', features: [], total: 0 };
   let candSel = null;
-  let projects = [], project = null, catalog = null, draft = null;
+  let projects = [], project = null, catalog = null, me = null;
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } } };
   const VERDICT_LABEL = { permitted: 'Permitted', conditional: 'Conditional use', prohibited: 'Not allowed', unknown: 'Unknown' };
   const VERDICT_PILL = { permitted: 'pass', conditional: 'review', prohibited: 'fail', unknown: 'unknown' };
-  const { chip: scoreChip, mapExpr: scoreMapExpr, scoreColor } = window.paydirtScore; // one ramp: chips, dots, legend, bars
+  const { chip: scoreChip, mapExpr: scoreMapExpr } = window.paydirtScore; // one ramp: chips, dots, legend, bars
   const fmtPin = (pin) => `${String(pin).slice(0, 6)}-${String(pin).slice(6)}`;
   const siteTitle = (p) => p.address || `Parcel ${fmtPin(p.pin)}`;
   // The facts a scanner needs, as at most three short labels: zoning, what's on the site, the owner.
@@ -20,13 +20,15 @@
     if (site) out.push(`<span class="pill ${site[1]}">${site[2]}</span>`);
     const sig = p.signals.find((s) => /inherit/.test(s)) ? 'Inherited' : p.years_held >= 20 ? `Held ${Math.floor(p.years_held)}y` : p.signals.find((s) => /no market sale/.test(s)) ? 'No sale on record' : null;
     if (sig) out.push(`<span class="pill">${sig}</span>`);
-    if (p.status !== 'new') out.push(`<span class="pill ${p.status}">${esc(p.status)}</span>`);
+    if (p.status !== 'new') out.push(`<span class="pill ${p.status}">${esc(STATUS_TEXT[p.status] ?? p.status)}</span>`);
     return out.join('');
   }
   const TAG_TEXT = { 'vacant-land': 'Vacant land', 'operating-business': 'Business operating', 'anchor-tenant': 'Major anchor tenant', 'leased-to-business': 'Leased to a business',
     'company-owned': 'Company-owned', 'closing-tenant': 'Closing tenant', 'possible-empty-building': 'Possible empty building', 'tax-bill-to-business': 'Tax bill paid by a business' };
   const TAG_TONE = { 'vacant-land': 'pass', 'operating-business': 'fail', 'anchor-tenant': 'fail', 'leased-to-business': 'fail', 'closing-tenant': 'review', 'possible-empty-building': 'review' };
   const OWNER_TEXT = { individual: 'Individual', trust: 'Family trust or estate', llc: 'LLC', company: 'Company', government: 'Government' };
+  // Stored status values stay as they are; 'rejected' reads as Passed.
+  const STATUS_TEXT = { new: 'Saved', shortlist: 'Shortlist', contacted: 'Contacted', rejected: 'Passed' };
   const VERDICT_SHORT = { permitted: 'Permitted', conditional: 'Conditional', prohibited: 'Not allowed', unknown: 'Zoning unknown' };
   const where = (p) => p.city ? titleCase(p.city) : `Unincorporated${p.postal_city ? ' · ' + titleCase(p.postal_city) : ''}`;
   const titleCase = (s) => String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
@@ -67,46 +69,48 @@
       const start = url.get('new');
       if (start === 'brief') $('bBrief').click();
       else if (start === 'interview') $('bInterview').click();
-      else if (start === 'form') { $('projEdit').open = true; $('jName').value = 'New project'; $('jName').focus(); }
     }).catch(showErr);
   });
 
   // ---------- Data ----------
   let pending = null;
+  // The project is the filter; the bar only adds the search text. Passed sites stay off the map
+  // unless "Show passed sites" is on under Layers.
+  const hidePassed = () => !$('lyPassed')?.checked;
   async function loadCandidates() {
-    const q = new URLSearchParams();
-    const set = (k, v) => { if (v !== '' && v != null) q.set(k, v); };
-    set('minAcres', $('cMinAc').value); set('maxAcres', $('cMaxAc').value);
-    set('verdict', $('cVerdict').value); set('minScore', +$('cMinScore').value || '');
-    set('area', $('cArea').value.trim()); set('signal', $('cSignal').value); if ($('cStatus').value === 'saved') set('saved', 'true'); else set('status', $('cStatus').value);
-    const site = $('cSite').value; if (site.startsWith('-')) set('notTag', site.slice(1)); else set('tag', site);
-    const key = q.toString();
+    const q = new URLSearchParams({ hidePassed: String(hidePassed()) });
+    const area = $('cArea').value.trim(); if (area) q.set('area', area);
+    const key = q.toString() + '|' + project.id + '|' + project.spec_version;
     pending = key;
     $('cCount').textContent = '(loading…)';
-    const r = await api(`/api/projects/${project.id}/candidates?` + key);
-    if (pending !== key) return; // a newer filter change won
+    const r = await api(`/api/projects/${project.id}/candidates?` + q);
+    if (pending !== key) return; // a newer request won
     cand = r;
     map.getSource('cand')?.setData(cand);
     renderCandList();
   }
   let t = null;
-  $('candForm').oninput = () => { clearTimeout(t); t = setTimeout(() => loadCandidates().catch(showErr), 300); };
-  $('candForm').onsubmit = (e) => e.preventDefault();
+  if ($('lyPassed')) $('lyPassed').onchange = () => loadCandidates().catch(showErr);
+  $('cArea').oninput = () => { clearTimeout(t); t = setTimeout(() => loadCandidates().catch(showErr), 300); };
+  $('candForm').onsubmit = (e) => { e.preventDefault(); clearTimeout(t); loadCandidates().catch(showErr); };
   const showErr = (e) => { $('cCount').textContent = ''; $('cList').innerHTML = `<li class="msg err">${esc(e.message)}</li>`; };
 
   function renderCandList() {
     const shown = cand.features.slice(0, 150);
-    $('cCount').textContent = `· ${cand.total.toLocaleString()} fit${cand.total > shown.length ? `, best ${shown.length} shown` : ''}`;
-    $('cList').innerHTML = shown.map(({ properties: p }) => `
+    const searching = Boolean($('cArea').value.trim());
+    $('cCount').textContent = `· ${cand.total.toLocaleString()} ${searching ? 'found' : 'fit'}${cand.total > shown.length ? `, best ${shown.length} shown` : ''}`;
+    $('cList').innerHTML = shown.map(({ properties: p }, i) => `
       <li data-pin="${esc(p.pin)}" class="row ${p.pin === candSel ? 'sel' : ''}">
+        <span class="rank" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>
         ${scoreChip(p.score)}
         <div class="rowMain">
           <span class="t">${esc(siteTitle(p))}</span>
           <span class="m">${fmt.ac(p.acres)} · ${esc(p.zoning || 'No zone')} · ${esc(where(p))}</span>
           <span class="facts">${rowFacts(p)}</span>
+          ${p.hiddenFields?.length ? `<span class="hiddenWhy" title="${esc(p.hiddenBecause.join('; '))}">Hidden: ${esc(Criteria.hiddenNames(p.hiddenFields, catalog).join(', '))}</span>` : ''}
         </div>
         <button type="button" class="rowStar" data-star="${esc(p.pin)}" aria-pressed="${p.saved ? 'true' : 'false'}" title="${p.saved ? 'Saved to this project' : 'Save to this project'}" aria-label="${p.saved ? 'Unsave' : 'Save'} ${esc(siteTitle(p))}">${p.saved ? '★' : '☆'}</button>
-      </li>`).join('') || '<li class="muted">No candidates match these filters.</li>';
+      </li>`).join('') || `<li class="muted">${searching ? 'Nothing found for that search.' : 'No sites match this project.'}</li>`;
     window.paydirtTaper.apply($('cList'));
   }
   $('cList').onclick = (e) => {
@@ -137,33 +141,82 @@
   async function loadProjects(selectId) {
     const r = await api('/api/projects');
     projects = r.projects; catalog = r.catalog;
+    if (!me) me = await api('/api/me').catch(() => null);
     const want = Number(selectId ?? store.get('paydirt.project'));
     project = projects.find((p) => p.id === want) ?? projects[0];
     if (!project) throw new Error('No projects yet.');
-    $('cProject').innerHTML = projects.map((p) => `<option value="${p.id}" ${p.id === project.id ? 'selected' : ''}>${esc(p.name)}${p.shortlisted ? ` (${p.shortlisted} shortlisted)` : ''}</option>`).join('');
-    $('jAddReq').innerHTML = '<option value="">+ Add requirement…</option>' + Object.entries(catalog.requirements).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join('');
-    $('jAddPref').innerHTML = '<option value="">+ Add preference…</option>' + Object.entries(catalog.preferences).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join('');
+    paintProjectList();
     applyProject();
+  }
+  function paintProjectList() {
+    $('cProject').innerHTML = projects.map((p) => `<option value="${p.id}" ${p.id === project.id ? 'selected' : ''}>${esc(p.name)}${p.shortlisted ? ` (${p.shortlisted} shortlisted)` : ''}</option>`).join('');
   }
 
   function applyProject() {
     store.set('paydirt.project', String(project.id));
     $('projTitle').textContent = project.name;
     for (const [n, h] of [['navMap', `map.html?project=${project.id}`], ['navSaved', `project.html?id=${project.id}`]]) { const a = document.getElementById(n); if (a) a.href = h; }
-    draft = structuredClone(project.spec);
-    const acres = draft.preferences.find((p) => p.field === 'acres')?.params;
-    if (acres) { $('cMinAc').value = acres.min; $('cMaxAc').value = acres.max; } else { $('cMinAc').value = ''; $('cMaxAc').value = ''; }
-    $('jName').value = project.name; $('jBrief').value = project.brief ?? ''; $('jNote').value = ''; $('jMsg').textContent = '';
-    renderCriteria();
+    renderBar();
     loadHistory();
   }
 
   async function loadHistory() {
+    const id = project.id;
     try {
-      const r = await api(`/api/projects/${project.id}`);
-      $('jHist').innerHTML = r.history.map((h) => `<li>v${h.version} · ${esc(new Date(h.created_at).toLocaleDateString())} · ${esc(h.source)}${h.change_note ? ` — ${esc(h.change_note)}` : ''}</li>`).join('');
-    } catch { /* history is optional */ }
+      const r = await api(`/api/projects/${id}`);
+      if (project.id === id) adopt(r);
+    } catch { /* Undo and History stay unavailable until the next save */ }
   }
+
+  // ---------- Criteria bar ----------
+  const Criteria = window.paydirtCriteria;
+  // Take a project as the server returned it (after a save, a refused save, or a reload).
+  function adopt(p) {
+    project = { ...project, ...p };
+    projects = projects.map((x) => (x.id === project.id ? project : x));
+    renderBar();
+  }
+  const chipButton = (key) => $('critChips').querySelector(`[data-chip="${key}"]`) ?? $('critChips').querySelector('[data-add]');
+
+  function renderBar() {
+    Criteria.render($('critChips'), project, catalog, { onChip: openEditor, onAdd: openEditor });
+    $('critVer').textContent = `v${project.spec_version}`;
+    const h = project.history ?? [];
+    const mine = h[0] && me && h[0].changed_by === me.user_uid;
+    $('critUndo').disabled = !(h.length > 1 && mine);
+    $('critUndo').title = h.length < 2 ? 'Nothing to undo yet' : mine ? `Go back to version ${h[1].version}` : 'Last change was made by a teammate';
+    $('critHist').disabled = !h.length;
+  }
+
+  function afterSave(p) {
+    adopt(p);
+    window.clearCandidate(); $('detail').hidden = true;
+    loadCandidates().catch(showErr);
+  }
+  // Someone else saved first: show their version; the list follows it.
+  const conflicted = (p) => afterSave(p);
+
+  function openEditor(key, btn) {
+    Criteria.edit({ project, catalog, key, hidePassed: hidePassed(), nowCount: () => ($('cArea').value.trim() ? null : cand.total), returnFocus: () => chipButton(key) ?? btn, onSaved: afterSave, onConflict: conflicted });
+  }
+
+  $('critUndo').onclick = async () => {
+    const h = project.history ?? [];
+    if (h.length < 2) return;
+    $('critUndo').disabled = true;
+    try { afterSave(await Criteria.restore(project, typeof h[1].spec === 'string' ? JSON.parse(h[1].spec) : h[1].spec)); }
+    catch (e) {
+      if (e.status === 409 && e.body?.project) { conflicted(e.body.project); $('critUndo').title = "Changed by a teammate — here's the current version"; }
+      else { showErr(e); renderBar(); }
+    }
+  };
+  $('critHist').onclick = () => Criteria.history({ project, me, catalog, returnFocus: () => $('critHist'), onSaved: afterSave, onConflict: conflicted });
+
+  // The bar wraps onto more rows when the chips don't fit; keep the map and list below it.
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty('--mapbar', `${$('critBar').offsetHeight}px`);
+    map.resize();
+  }).observe($('critBar'));
 
   $('cProject').onchange = () => {
     project = projects.find((p) => p.id === Number($('cProject').value)) ?? project;
@@ -172,93 +225,53 @@
     loadCandidates().catch(showErr);
   };
 
-  const signalLabel = (k) => catalog.signals[k] ?? k;
-  const optLabel = (field, o) => (field === 'owner_signals' ? signalLabel(o) : o === 'city' ? 'Inside a city' : o === 'unincorporated' ? 'Unincorporated county' : o[0].toUpperCase() + o.slice(1));
-
-  function reqEditor(r, i) {
-    const d = catalog.requirements[r.field];
-    let body = '';
-    if (d.type === 'range') body = `<div class="row"><label>Min <input type="number" data-k="min" value="${r.value?.[0] ?? ''}"></label><label>Max <input type="number" data-k="max" value="${r.value?.[1] ?? ''}"></label></div>`;
-    else if (d.type === 'set') body = `<div class="opts">${d.options.map((o) => `<label><input type="checkbox" data-opt="${o}" ${(r.value ?? []).includes(o) ? 'checked' : ''}> ${esc(optLabel(r.field, o))}</label>`).join('')}</div>`;
-    else if (d.type === 'list') body = `<input type="text" data-k="list" value="${esc((r.value ?? []).join(', '))}" placeholder="Redmond, Sammamish, Duvall">`;
-    else if (d.type === 'min' || d.type === 'max') body = `<input type="number" data-k="num" value="${r.value ?? ''}" placeholder="${d.type === 'min' ? 'At least' : 'At most'}">`;
-    return `<div class="crit" data-kind="req" data-i="${i}"><div class="head">${esc(d.label)}<button type="button" data-remove title="Remove">×</button></div>${body}
-      <input type="text" class="why" data-k="why" value="${esc(r.why ?? '')}" placeholder="Why (optional)"></div>`;
+  // ---------- Project menu (next to the name) ----------
+  const menu = $('projMenu'), menuBtn = $('projMenuBtn');
+  function showMenu(open, focusBack) {
+    menu.hidden = !open; menuBtn.setAttribute('aria-expanded', String(open));
+    if (open) menu.querySelector('button').focus(); else if (focusBack) menuBtn.focus();
   }
-
-  function prefEditor(p, i) {
-    const d = catalog.preferences[p.field];
-    const params = p.params ?? d.params;
-    let extra = '';
-    if (p.field === 'acres') extra = `<div class="row"><label>Target min <input type="number" data-p="min" value="${params.min}"></label><label>Target max <input type="number" data-p="max" value="${params.max}"></label></div>`;
-    if (p.field === 'hh200k_10mi' || p.field === 'land_value_per_acre') extra = `<label>${p.field === 'hh200k_10mi' ? 'Households for a full score' : 'Full score at or below ($/acre)'} <input type="number" data-p="target" value="${params.target}"></label>`;
-    if (p.field === 'owner_signals') extra = `<details><summary class="muted" style="font-size:12px">Points per signal</summary><div class="opts">${Object.entries(params.points).map(([k, v]) => `<label>${esc(signalLabel(k))} <input type="number" style="width:60px" data-pt="${k}" value="${v}"></label>`).join('')}</div></details>`;
-    return `<div class="crit" data-kind="pref" data-i="${i}"><div class="head">${esc(d.label)}<button type="button" data-remove title="Remove">×</button></div>
-      <label>Weight <input type="number" min="0" max="100" step="1" data-k="weight" value="${p.weight}"></label>${extra}
-      <input type="text" class="why" data-k="why" value="${esc(p.why ?? '')}" placeholder="Why (optional)"></div>`;
-  }
-
-  function renderCriteria() {
-    $('jReqs').innerHTML = draft.requirements.map(reqEditor).join('') || '<p class="muted" style="margin:0;font-size:12px">None: every parcel is ranked.</p>';
-    const total = draft.preferences.reduce((a, p) => a + (Number(p.weight) || 0), 0) || 1;
-    $('jPrefs').innerHTML = draft.preferences.map((p, i) => prefEditor(p, i).replace('</div>\n      <label>Weight', `<span class="muted" style="font-weight:400">${Math.round((Number(p.weight) || 0) / total * 100)}%</span></div>\n      <label>Weight`)).join('');
-  }
-
-  // Read the editors back into the draft spec.
-  function readCriteria() {
-    for (const el of document.querySelectorAll('#jReqs .crit')) {
-      const r = draft.requirements[+el.dataset.i]; const d = catalog.requirements[r.field];
-      r.why = el.querySelector('[data-k=why]').value;
-      if (d.type === 'range') r.value = [el.querySelector('[data-k=min]').value, el.querySelector('[data-k=max]').value].map((v) => (v === '' ? null : +v));
-      else if (d.type === 'set') r.value = [...el.querySelectorAll('[data-opt]')].filter((c) => c.checked).map((c) => c.dataset.opt);
-      else if (d.type === 'list') r.value = el.querySelector('[data-k=list]').value.split(',').map((x) => x.trim()).filter(Boolean);
-      else if (d.type === 'min' || d.type === 'max') r.value = el.querySelector('[data-k=num]').value === '' ? null : +el.querySelector('[data-k=num]').value;
-      else r.value = true;
-    }
-    for (const el of document.querySelectorAll('#jPrefs .crit')) {
-      const p = draft.preferences[+el.dataset.i];
-      p.weight = +el.querySelector('[data-k=weight]').value || 0;
-      p.why = el.querySelector('[data-k=why]').value;
-      p.params = structuredClone(p.params ?? catalog.preferences[p.field].params);
-      for (const inp of el.querySelectorAll('[data-p]')) p.params[inp.dataset.p] = +inp.value;
-      for (const inp of el.querySelectorAll('[data-pt]')) p.params.points[inp.dataset.pt] = +inp.value;
-    }
-  }
-
-  $('projForm').addEventListener('click', (e) => {
-    const rm = e.target.closest('[data-remove]'); if (!rm) return;
-    readCriteria();
-    const el = rm.closest('.crit');
-    (el.dataset.kind === 'req' ? draft.requirements : draft.preferences).splice(+el.dataset.i, 1);
-    renderCriteria();
+  menuBtn.onclick = () => showMenu(menu.hidden);
+  document.addEventListener('click', (e) => { if (!menu.hidden && !e.target.closest('.critProj')) showMenu(false); });
+  menu.addEventListener('keydown', (e) => {
+    const items = [...menu.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); showMenu(false, true); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
   });
-  $('jPrefs').addEventListener('change', () => { readCriteria(); renderCriteria(); });
-  $('jAddReq').onchange = () => {
-    const f = $('jAddReq').value; if (!f) return; readCriteria();
-    const d = catalog.requirements[f];
-    draft.requirements.push({ field: f, value: d.type === 'set' ? [...d.options] : d.type === 'range' ? [null, null] : d.type === 'bool' ? true : null, why: '' });
-    $('jAddReq').value = ''; renderCriteria();
-  };
-  $('jAddPref').onchange = () => {
-    const f = $('jAddPref').value; if (!f) return; readCriteria();
-    draft.preferences.push({ field: f, weight: 10, params: structuredClone(catalog.preferences[f].params), why: '' });
-    $('jAddPref').value = ''; renderCriteria();
+  menu.onclick = (e) => {
+    const b = e.target.closest('[data-proj]'); if (!b) return;
+    showMenu(false);
+    if (b.dataset.proj === 'rename') startRename();
+    else window.paydirtBuilder.brief({ revise: true });
   };
 
-  async function saveProject(asNew) {
-    readCriteria();
-    const body = { name: $('jName').value.trim() || 'Untitled project', brief: $('jBrief').value, spec: draft, changeNote: $('jNote').value.trim() };
-    try {
-      const saved = asNew
-        ? await api('/api/projects', { method: 'POST', body: { ...body, name: body.name === project.name ? `${body.name} (copy)` : body.name } })
-        : await api(`/api/projects/${project.id}`, { method: 'PUT', body });
-      await loadProjects(saved.id);
-      $('jMsg').className = 'msg'; $('jMsg').textContent = asNew ? 'Created a new project.' : `Saved as version ${saved.spec_version}. List re-ranked.`;
-      await loadCandidates();
-    } catch (e) { $('jMsg').className = 'msg err'; $('jMsg').textContent = e.message; }
+  function startRename() {
+    $('projTitle').hidden = true; menuBtn.hidden = true; $('projRename').hidden = false;
+    $('projNameIn').value = project.name; $('projNameIn').select();
   }
-  $('projForm').onsubmit = (e) => { e.preventDefault(); saveProject(false); };
-  $('jSaveNew').onclick = () => saveProject(true);
+  function endRename() {
+    $('projRename').hidden = true; $('projTitle').hidden = false; menuBtn.hidden = false; menuBtn.focus();
+  }
+  $('projRenameCancel').onclick = endRename;
+  $('projRename').onkeydown = (e) => { if (e.key === 'Escape') { e.preventDefault(); endRename(); } };
+  $('projRename').onsubmit = async (e) => {
+    e.preventDefault();
+    const name = $('projNameIn').value.trim();
+    if (!name || name === project.name) return endRename();
+    const btn = $('projRename').querySelector('[type=submit]'); btn.disabled = true;
+    const save = () => Criteria.request(`/api/projects/${project.id}`, { method: 'PUT', body: { name, baseVersion: project.spec_version } });
+    try {
+      let saved;
+      // A teammate's criteria change since this page loaded doesn't conflict with a new name: take theirs and rename it.
+      try { saved = await save(); } catch (err) { if (err.status === 409 && err.body?.project) { conflicted(err.body.project); saved = await save(); } else throw err; }
+      adopt(saved);
+      $('projTitle').textContent = project.name; paintProjectList();
+      endRename();
+    } catch (err) {
+      const input = $('projNameIn'); input.setCustomValidity(err.message); input.reportValidity();
+      input.addEventListener('input', () => input.setCustomValidity(''), { once: true });
+    } finally { btn.disabled = false; }
+  };
 
   // Let the builder (builder.js) reload projects and read the current one.
   window.paydirtProjects = { reload: async (id) => { await loadProjects(id); await loadCandidates(); }, current: () => project };
@@ -296,16 +309,13 @@
     api(`/api/candidates/${encodeURIComponent(pin)}/profile`).then((r) => renderProfile(r, pin)).catch((e) => { const el = $('ownOut'); if (el) el.textContent = e.message; });
   }
 
-  const bar = (label, v) => `<span>${label}</span><span class="bar"><i style="width:${v}%;background:${scoreColor(v)}"></i></span><span>${v}</span>`;
-
   function renderCandidate(c) {
     const landPerAc = c.land_value && c.acres ? c.land_value / c.acres : null;
     $('detailBody').innerHTML = `
       <h3>${esc(c.address || 'No site address')}</h3>
       <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} ${scoreChip(c.score)}</p>
       ${c.hiddenBecause.length ? `<p class="warn" data-taper="2">Not in this project's results: ${c.hiddenBecause.map(esc).join('; ')}</p>` : ''}
-      <section><h2>Why it scores ${c.score}</h2><div class="bars">${c.subscores.map((s) => bar(`${esc(s.label)} <span class="muted">${Math.round(s.share * 100)}%</span>`, s.value)).join('')}</div>
-        <p class="muted" style="font-size:12px;margin:0">Each line is how well it meets one thing ${esc(project.name)} wants (100 = fully). The percentage is how much that thing counts.</p></section>
+      <section><h2>Why it scores ${c.score}</h2>${Criteria.checklistHtml(project, c, catalog)}</section>
       <section><h2>On this site</h2>
         <div class="tagRow">${(c.tags ?? []).map((t) => `<span class="pill ${TAG_TONE[t] ?? ''}">${esc(TAG_TEXT[t] ?? t)}</span>`).join('') || '<span class="muted">No site tags.</span>'}</div>
         <dl><dt>Owner type</dt><dd>${esc(OWNER_TEXT[c.owner_type] ?? 'Unknown')}</dd><dt>Building value</dt><dd>${c.impr_value != null && c.acres ? `${fmt.usd(c.impr_value / c.acres)} per acre` : '—'}</dd></dl>
@@ -331,7 +341,7 @@
         <div id="cEnrichOut"></div>
         <button id="cEnrichBtn" type="button">${c.enrichment ? 'Check again' : 'Check slope, wetlands & flood'} · $0.02</button><p id="cEnrichMsg" class="msg"></p></section>
       <section><h2>Review</h2>
-        <select id="cRevStatus">${['new', 'shortlist', 'contacted', 'rejected'].map((s) => `<option ${c.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        <select id="cRevStatus" aria-label="Status">${Object.entries(STATUS_TEXT).map(([s, t]) => `<option value="${s}" ${c.status === s ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <textarea id="cRevNotes" placeholder="Notes: site visit, owner contact, broker intel…">${esc(c.notes)}</textarea>
         <button id="cRevSave" class="secondary" type="button">Save review</button><p id="cRevMsg" class="msg"></p></section>`;
 

@@ -39,6 +39,7 @@
   </section>
   <section class="block">
     <div class="block-head"><h2 class="title"><i class="tilt" aria-hidden="true"></i>saved</h2><span id="savedCount" class="lblish"></span></div>
+    <div id="statusFilter" class="statusFilter" role="group" aria-label="Show status"></div>
     <div id="saved"><p class="muted">Loading…</p></div>
     <p id="msg" class="msg"></p>
   </section>
@@ -53,36 +54,61 @@
 <script src="pages.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="property.js"></script>
+<script src="criteria.js"></script>
 <script>
 (async () => {
   const { $, esc, api, where, siteTitle, ac, date, labels, STATUSES, STATUS_TEXT } = pd;
   const id = Number(new URLSearchParams(location.search).get('id'));
+  // Status filter over the rows already loaded: All, then each status.
+  let rows = [], show = 'all';
+  const FILTERS = [['all', 'All'], ...STATUSES.map((s) => [s, STATUS_TEXT[s]])];
+  function paintFilter() {
+    $('statusFilter').innerHTML = FILTERS.map(([v, t]) => {
+      const n = v === 'all' ? rows.length : rows.filter((p) => p.status === v).length;
+      return `<button type="button" data-show="${v}" aria-pressed="${show === v}">${esc(t)} <span class="lblish">${n}</span></button>`;
+    }).join('');
+  }
+  $('statusFilter').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-show]'); if (!b) return;
+    show = b.dataset.show; paint();
+  });
   async function load() {
     const r = await api(`/api/projects/${id}/saved`);
+    rows = r.saved;
     document.title = `${r.project.name} · Paydirt`;
     $('pName').textContent = r.project.name;
     $('pBrief').textContent = r.project.brief || '';
     $('pMeta').textContent = `Version ${r.project.spec_version} · ${r.project.project_uid}`;
     $('openMap').href = `map.html?project=${r.project.id}`;
     $('savedCount').textContent = `${r.saved.length} properties`; $('heroSaved').textContent = r.saved.length;
-    $('saved').innerHTML = r.saved.length ? `<div class="table-wrap"><table class="grid">
+    paint();
+  }
+  function paint() {
+    paintFilter();
+    const list = show === 'all' ? rows : rows.filter((p) => p.status === show);
+    $('saved').innerHTML = list.length ? `<div class="table-wrap"><table class="grid">
       <thead><tr><th>Score</th><th>Property</th><th>Status</th><th>Notes</th><th>Saved</th><th></th></tr></thead>
-      <tbody>${r.saved.map((p) => `<tr data-pin="${esc(p.pin)}">
+      <tbody>${list.map((p) => `<tr data-pin="${esc(p.pin)}">
         <td>${p.score != null ? paydirtScore.chip(p.score) : '<span class="muted small">Hidden</span>'}</td>
         <td><button type="button" class="linkBtn titleBtn" data-view>${esc(siteTitle(p))}</button><div class="muted small">${ac(p.acres)} · ${esc(p.zoning || 'No zone')} · ${esc(where(p))}</div><div class="facts">${labels(p)}</div>
-          ${p.hiddenByCriteria ? '<div class="muted small">No longer matches this project’s requirements.</div>' : ''}</td>
+          ${p.hiddenByCriteria ? '<div class="muted small">No longer fits this project’s criteria.</div>' : ''}</td>
         <td><select data-status aria-label="Status">${STATUSES.map((s) => `<option value="${s}" ${p.status === s ? 'selected' : ''}>${STATUS_TEXT[s]}</option>`).join('')}</select></td>
         <td><textarea data-notes rows="2" placeholder="Site visit, owner contact…">${esc(p.notes)}</textarea></td>
         <td class="nowrap">${date(p.saved_at)}</td>
         <td class="nowrap"><a href="map.html?project=${id}&pin=${encodeURIComponent(p.pin)}">Map</a> · <button type="button" class="linkBtn" data-unsave>Remove</button></td>
       </tr>`).join('')}</tbody></table></div>`
+      : rows.length ? `<div class="empty"><b>No ${esc(STATUS_TEXT[show])} properties</b><p class="muted">Pick All to see every saved property.</p></div>`
       : `<div class="empty"><b>Nothing saved to this project yet</b><p class="muted">Open the map and tap ☆ on a parcel.</p></div>`;
     window.paydirtTaper?.apply(document);
   }
   const say = (t, err) => { $('msg').className = err ? 'msg err' : 'msg'; $('msg').textContent = t; };
   $('saved').addEventListener('change', async (e) => {
     const row = e.target.closest('tr[data-pin]'); if (!row || !e.target.matches('[data-status]')) return;
-    try { await api(`/api/projects/${id}/reviews/${encodeURIComponent(row.dataset.pin)}`, { method: 'PATCH', body: { status: e.target.value } }); say('Status saved.'); }
+    try {
+      await api(`/api/projects/${id}/reviews/${encodeURIComponent(row.dataset.pin)}`, { method: 'PATCH', body: { status: e.target.value } }); say('Status saved.');
+      const p = rows.find((x) => x.pin === row.dataset.pin); if (p) p.status = e.target.value;
+      paintFilter(); // counts follow; the row stays put until the filter changes
+    }
     catch (err) { say(err.message, true); }
   });
   $('saved').addEventListener('focusout', async (e) => {

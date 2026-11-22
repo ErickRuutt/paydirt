@@ -16,7 +16,8 @@
     "fetch:osm": "node scripts/fetch-osm-pois.js",
     "sql": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/sql.js",
     "setup:notion": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/setup-notion-feedback.js",
-    "feedback:resend": "node --env-file-if-exists=.env scripts/resend-feedback.js"
+    "feedback:resend": "node --env-file-if-exists=.env scripts/resend-feedback.js",
+    "test": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --test test/*.test.js"
   },
   "engines": {
     "node": ">=20.9"

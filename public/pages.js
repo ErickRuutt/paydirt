@@ -27,6 +27,6 @@ window.pd = (() => {
     return out.join('');
   }
   const STATUSES = ['new', 'shortlist', 'contacted', 'rejected'];
-  const STATUS_TEXT = { new: 'Saved', shortlist: 'Shortlist', contacted: 'Contacted', rejected: 'Rejected' };
+  const STATUS_TEXT = { new: 'Saved', shortlist: 'Shortlist', contacted: 'Contacted', rejected: 'Passed' }; // stored as 'rejected'
   return { $, esc, api, where, siteTitle, ac, date, labels, STATUSES, STATUS_TEXT };
 })();

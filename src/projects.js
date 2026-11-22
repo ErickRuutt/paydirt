@@ -1,5 +1,5 @@
 import { all, one, run, pool } from './db.js';
-import { normalizeSpec, compileSpec, failedRequirements } from './spec.js';
+import { normalizeSpec, compileSpec, failedChecks } from './spec.js';
 import { newId } from './ids.js';
 import { logEvent } from './identity.js';
 
@@ -41,29 +41,60 @@ export async function createProject({ name, brief = '', spec }, user, source = '
 }
 
 // Saves a new spec version with a note on why it changed. Name and brief update without a new version.
-export async function updateProject(id, { name, brief, spec, changeNote = '' }, user, source = 'form') {
+export async function updateProject(id, { name, brief, spec, changeNote = '', baseVersion }, user, source = 'form') {
   const userId = user?.uid ?? null;
   const p = await getProject(id, user?.orgUid);
   if (!p) throw Object.assign(new Error('Project not found.'), { status: 404 });
-  if (name != null || brief != null) {
-    await run('UPDATE projects SET name = COALESCE(?, name), brief = COALESCE(?, brief), updated_at = now() WHERE id = ?',
-      [name != null ? String(name).slice(0, 120) : null, brief != null ? String(brief).slice(0, 20000) : null, p.id]);
-  }
-  if (spec != null) {
-    const { spec: s, errors } = normalizeSpec(spec);
-    if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
-    if (JSON.stringify(s) !== JSON.stringify(p.spec)) {
-      const version = p.spec_version + 1;
-      await run('UPDATE projects SET spec = ?, spec_version = ?, updated_at = now() WHERE id = ?', [JSON.stringify(s), version, p.id]);
-      await run('INSERT INTO project_spec_history (project_id, version, spec, change_note, source, changed_by) VALUES (?, ?, ?, ?, ?, ?)',
-        [p.id, version, JSON.stringify(s), String(changeNote).slice(0, 1000), source, userId ?? null]);
+  const normalized = spec != null ? normalizeSpec(spec) : null;
+  if (normalized?.errors.length) throw Object.assign(new Error(normalized.errors.join(' ')), { status: 400 });
+  // One transaction, row-locked: a save based on an older version than the one stored is refused (409),
+  // so two people editing at once never silently overwrite each other.
+  const client = await pool.connect();
+  let released = false;
+  try {
+    await client.query('BEGIN');
+    const cur = (await client.query('SELECT spec, spec_version FROM projects WHERE id = $1 FOR UPDATE', [p.id])).rows[0];
+    if (baseVersion != null && Number(baseVersion) !== cur.spec_version) {
+      await client.query('ROLLBACK');
+      client.release(); released = true;
+      const latest = await getProject(p.id, user?.orgUid);
+      throw Object.assign(new Error('Someone changed this project since you opened it.'), { status: 409, project: { ...latest, history: await projectHistory(p.id) } });
     }
-  }
+    if (name != null || brief != null) {
+      await client.query('UPDATE projects SET name = COALESCE($1, name), brief = COALESCE($2, brief), updated_at = now() WHERE id = $3',
+        [name != null ? String(name).slice(0, 120) : null, brief != null ? String(brief).slice(0, 20000) : null, p.id]);
+    }
+    // Compare against the stored spec normalized the same way, so a spec saved before a key existed
+    // (e.g. one without `pending`) doesn't register a no-op save as a change.
+    if (normalized && JSON.stringify(normalized.spec) !== JSON.stringify(normalizeSpec(cur.spec).spec)) {
+      const version = cur.spec_version + 1;
+      await client.query('UPDATE projects SET spec = $1, spec_version = $2, updated_at = now() WHERE id = $3', [JSON.stringify(normalized.spec), version, p.id]);
+      await client.query('INSERT INTO project_spec_history (project_id, version, spec, change_note, source, changed_by) VALUES ($1, $2, $3, $4, $5, $6)',
+        [p.id, version, JSON.stringify(normalized.spec), String(changeNote).slice(0, 1000), source, userId]);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    if (!released) await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { if (!released) client.release(); }
   return getProject(p.id, user?.orgUid);
 }
 
+// How many sites a draft spec would show, without scoring or fetching rows (the chip editor's "Show N sites").
+export async function previewCount(project, spec, { hidePassed } = {}) {
+  const { spec: s, errors } = normalizeSpec(spec);
+  if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
+  const k = compileSpec(s);
+  const where = ['c.excluded IS NULL', ...k.where];
+  if (hidePassed) where.push("COALESCE(r.status, 'new') <> 'rejected'");
+  const row = await one(`SELECT count(*)::int AS n FROM candidates c
+    LEFT JOIN project_properties r ON r.property_uid = c.property_uid AND r.project_id = ${Number(project.id)}
+    WHERE ${where.join(' AND ')}`, k.whereParams);
+  return row.n;
+}
+
 export async function projectHistory(id) {
-  return (await all('SELECT version, spec, change_note, source, changed_by, created_at FROM project_spec_history WHERE project_id = ? ORDER BY version DESC', [Number(id)])).map(parse);
+  return (await all('SELECT version, spec, change_note, source, changed_by, created_at FROM project_spec_history WHERE project_id = ? ORDER BY version DESC LIMIT 50', [Number(id)])).map(parse);
 }
 
 export const REVIEW_STATUSES = ['new', 'shortlist', 'contacted', 'rejected'];
@@ -111,25 +142,30 @@ export async function orgSaved(orgUid, limit = 200) {
 
 // ---------- Candidates scored for a project ----------
 const LIST_COLS = `c.pin, c.property_uid, c.address, c.city, c.postal_city, c.acres, c.zoning, c.sports_verdict, c.present_use,
-  c.years_held, c.signals, c.hh200k_10mi, c.share200k_10mi, c.land_value, c.lat, c.lng, c.tags, c.businesses, c.owner_type`;
+  c.years_held, c.signals, c.hh200k_10mi, c.share200k_10mi, c.land_value, c.lat, c.lng, c.tags, c.businesses, c.owner_type,
+  c.out_of_state, c.absentee`;
 
 // filters: ad-hoc narrowing from the map/list (not saved to the project).
+// With search text (filters.area) the project's requirements don't filter: the search finds any parcel,
+// and each one the requirements would hide comes back with hiddenBecause (plain reasons) and hiddenFields.
 export async function projectCandidates(project, filters = {}) {
   const k = compileSpec(project.spec);
-  const where = ['c.excluded IS NULL', ...k.where];
-  const params = [...k.whereParams];
+  const searching = Boolean(String(filters.area ?? '').trim());
+  const where = ['c.excluded IS NULL', ...(searching ? [] : k.where)];
+  const params = searching ? [] : [...k.whereParams];
   const add = (sql, ...v) => { where.push(sql); params.push(...v); };
   if (filters.minAcres) add('c.acres >= ?', Number(filters.minAcres));
   if (filters.maxAcres) add('c.acres <= ?', Number(filters.maxAcres));
   if (filters.verdict) add('c.sports_verdict = ANY(?)', String(filters.verdict).split(','));
   // Search box: address, parcel number (dashes optional) or town.
-  if (filters.area) {
-    const q = `%${filters.area}%`, digits = String(filters.area).replace(/\D/g, '');
+  if (searching) {
+    const q = `%${String(filters.area).trim()}%`, digits = String(filters.area).replace(/\D/g, '');
     add(`(COALESCE(c.address, '') ILIKE ? OR COALESCE(c.city, '') ILIKE ? OR COALESCE(c.postal_city, '') ILIKE ?${digits.length >= 4 ? ' OR c.pin LIKE ?' : ''})`,
       q, q, q, ...(digits.length >= 4 ? [`%${digits}%`] : []));
   }
   if (filters.signal) add('c.signals ILIKE ?', `%${filters.signal}%`);
   if (filters.status) add("COALESCE(r.status, 'new') = ?", filters.status);
+  if (filters.hidePassed === 'true') add("COALESCE(r.status, 'new') <> 'rejected'");
   if (filters.saved === 'true') add('COALESCE(r.saved, false)');
   if (filters.pins) add('c.pin = ANY(?)', String(filters.pins).split(',').slice(0, 1000));
   if (filters.tag) add('c.tags LIKE ?', `%"${String(filters.tag).replace(/[^a-z-]/g, '')}"%`);
@@ -148,10 +184,15 @@ export async function projectCandidates(project, filters = {}) {
     type: 'FeatureCollection', total,
     project: { id: project.id, name: project.name, version: project.spec_version },
     subscores: k.subscores,
-    features: rows.filter((r) => r.lat != null).map(({ lat, lng, signals, tags, businesses, ...p }) => ({
-      type: 'Feature', id: p.pin, geometry: { type: 'Point', coordinates: [lng, lat] },
-      properties: { ...p, signals: JSON.parse(signals ?? '[]'), tags: JSON.parse(tags ?? '[]'), businessCount: JSON.parse(businesses ?? '[]').length },
-    })),
+    features: rows.filter((r) => r.lat != null).map((row) => {
+      const { lat, lng, signals, tags, businesses, ...p } = row;
+      const fails = searching ? failedChecks(project.spec, row) : [];
+      return {
+        type: 'Feature', id: p.pin, geometry: { type: 'Point', coordinates: [lng, lat] },
+        properties: { ...p, signals: JSON.parse(signals ?? '[]'), tags: JSON.parse(tags ?? '[]'), businessCount: JSON.parse(businesses ?? '[]').length,
+          hiddenBecause: fails.map((f) => f.reason), hiddenFields: fails.map((f) => f.field) },
+      };
+    }),
   };
 }
 
@@ -163,11 +204,12 @@ export async function projectCandidate(project, pin) {
     FROM candidates c LEFT JOIN project_properties r ON r.property_uid = c.property_uid AND r.project_id = ${Number(project.id)} WHERE c.pin = ?) s`;
   const c = await one(sql, [...k.scoreParams, pin]);
   if (!c) return null;
-  const fails = failedRequirements(project.spec, c);
+  const fails = c.excluded ? [{ field: 'excluded', reason: c.excluded }] : failedChecks(project.spec, c);
   return {
     ...c, geometry: JSON.parse(c.geometry_json), geometry_json: undefined, signals: JSON.parse(c.signals ?? '[]'),
     tags: JSON.parse(c.tags ?? '[]'), businesses: JSON.parse(c.businesses ?? '[]'),
     subscores: k.subscores.map((s) => ({ ...s, value: c[s.key] })),
-    hiddenBecause: c.excluded ? [c.excluded] : fails,
+    // hiddenFields[i] is the spec field behind hiddenBecause[i] ('excluded' when the parcel is out of every search).
+    hiddenBecause: fails.map((f) => f.reason), hiddenFields: fails.map((f) => f.field),
   };
 }

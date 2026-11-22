@@ -302,3 +302,6 @@ CREATE TABLE IF NOT EXISTS feedback (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS feedback_created ON feedback (created_at DESC);
+
+-- Added Nov 21, 2026: one row per project version, so two saves can never write the same version.
+CREATE UNIQUE INDEX IF NOT EXISTS project_spec_history_version ON project_spec_history (project_id, version);
