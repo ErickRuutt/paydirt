@@ -55,7 +55,7 @@ export async function quote(orgUid, { place, minAcres = 10 }) {
       why: `Paydirt can't load ${p.county}, ${p.state} on its own yet: its parcel source hasn't been connected. Request it and we'll add it.` };
   }
   const parcels = await countParcels(p.fips, minAcres);
-  return { ...base, supported: true, parcels, credits: priceFor(parcels) }; // our costs and markup never leave the server
+  return { ...base, supported: true, parcels, credits: priceFor(parcels), includes: c.includes ?? null }; // our costs and markup never leave the server
 }
 
 // Charge, load, and refund if loading fails. The advisory lock makes two unlocks by one org run one at a time,

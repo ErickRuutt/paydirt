@@ -11,13 +11,16 @@ const PIERCE_LAYER = 'https://services2.arcgis.com/1UvBaQ5y1ubjUPmd/ArcGIS/rest/
 const CLALLAM_LAYER = 'https://websrv31.clallamcountywa.gov/server/rest/services/Parcels_Published/MapServer/1';
 
 export const COUNTIES = {
-  53033: { fips: '53033', name: 'King County', state: 'WA', layer: KING_LAYER, loadedByScript: true, where: (min) => `KCA_ACRES >= ${Number(min)}`,
+  53033: { fips: '53033', name: 'King County', state: 'WA', layer: KING_LAYER, loadedByScript: true,
+    includes: 'address, owner signals, zoning verdicts, assessed values, sales history and current use', where: (min) => `KCA_ACRES >= ${Number(min)}`,
     sources: { parcels: { label: 'King County GIS parcels', url: 'https://gismaps.kingcounty.gov/' }, assessor: { label: 'King County Assessor', url: 'https://info.kingcounty.gov/assessor/esales/Parcel.aspx' } } },
   53009: { fips: '53009', name: 'Clallam County', state: 'WA', layer: CLALLAM_LAYER, load: loadClallam,
+    includes: 'owner, zoning code, assessed values, last deed date and site address where one exists',
     // Quotes count only parcels with assessed value: roads, national forest and water carry none.
     where: (min) => `ACRES_GIS >= ${Number(min)} AND (VALUE_LAND > 0 OR VALUE_IMPR > 0)`,
     sources: { parcels: { label: 'Clallam County GIS parcels', url: CLALLAM_LAYER }, assessor: { label: 'Clallam County Assessor', url: 'https://www.clallamcountywa.gov/279/Assessor' } } },
   53053: { fips: '53053', name: 'Pierce County', state: 'WA', layer: PIERCE_LAYER, load: loadPierce, townsFromCensus: true,
+    includes: 'site address, assessed values, land use, tax exemptions and the owner\'s mailing city (no owner names or zoning yet)',
     where: (min) => `Land_Acres >= ${Number(min)} AND (Land_Value > 0 OR Improvement_Value > 0)`,
     sources: { parcels: { label: 'Pierce County tax parcels', url: PIERCE_LAYER }, assessor: { label: 'Pierce County Assessor-Treasurer', url: 'https://atip.piercecountywa.gov/' } } },
 };
@@ -38,6 +41,7 @@ function statewide(fips) {
   const code = String(fips).slice(2), name = WA_NAMES[code];
   if (!String(fips).startsWith('53') || !name) return null;
   return { fips: String(fips), name: `${name} County`, state: 'WA', layer: WA_LAYER, townsFromCensus: true,
+    includes: 'site address, assessed values and land use (no owner names or zoning yet)',
     where: (min) => `FIPS_NR = '${code}' AND Shape__Area >= ${Math.floor(Number(min) * SQFT_PER_ACRE * 0.98)} AND (VALUE_LAND > 0 OR VALUE_BLDG > 0)`,
     load: (min) => loadStatewide(code, `${name} County`, min),
     sources: { parcels: { label: 'Washington statewide parcels (2026)', url: 'https://geo.wa.gov/' }, assessor: { label: `${name} County Assessor`, url: null } } };

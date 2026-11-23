@@ -98,7 +98,7 @@ window.paydirtAreas = (() => {
       const enough = q.balance >= q.credits;
       $('#adResult').innerHTML = band(enough ? 'ok' : 'warn', `<b>${placeLine(q)}</b>
         <span>Unlocking the county’s <strong>${q.parcels.toLocaleString()}</strong> parcels of ${q.minAcres}+ acres costs <strong>${q.credits.toLocaleString()} credits</strong>. You have ${q.balance.toLocaleString()}.</span>
-        <span class="small">You get every ${q.minAcres}+ acre parcel in the county with owner, zoning code, assessed values and last deed date.</span>
+        <span class="small">You get every ${q.minAcres}+ acre parcel in the county${q.includes ? `, with ${esc(q.includes)}` : ''}.</span>
         <span class="btnRow">${enough ? `<button type="button" data-act="unlock">Unlock for ${q.credits.toLocaleString()} credits</button>` : '<button type="button" disabled>Not enough credits</button>'}
           <button type="button" class="paper" data-act="request">Request it instead</button></span>
         ${enough ? '' : '<span class="small">Ask us for credits with the Feedback button; card payments are coming.</span>'}`);

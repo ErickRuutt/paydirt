@@ -133,7 +133,7 @@
     const enough = q.balance >= q.credits;
     $('quote').innerHTML = `<div class="fitBand ${enough ? 'ok' : 'warn'}"><b>${esc(q.place)} is in ${esc(county)}.</b>
       <span>Unlocking the county’s ${q.parcels.toLocaleString()} parcels of ${q.minAcres}+ acres costs <strong>${q.credits.toLocaleString()} credits</strong>. You have ${q.balance.toLocaleString()}.</span>
-      <span class="small">You get every ${q.minAcres}+ acre parcel in the county with its owner, zoning, assessed values and last deed date. Zoning rules for your use are read on request.</span>
+      <span class="small">You get every ${q.minAcres}+ acre parcel in the county${q.includes ? `, with ${esc(q.includes)}` : ''}. Zoning rules for your use are read on request.</span>
       <span class="btnRow">${enough ? `<button type="button" id="qUnlock">Unlock for ${q.credits.toLocaleString()} credits</button>` : '<button type="button" disabled>Not enough credits</button><span class="small">Ask us for credits with the Feedback button; card payments are coming.</span>'}</span></div>`;
   }
   $('quoteForm').addEventListener('submit', async (e) => {
