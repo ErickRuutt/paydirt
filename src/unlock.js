@@ -59,7 +59,7 @@ export async function quote(orgUid, { place, minAcres = 10 }) {
 
 // Charge, load, and refund if loading fails. The advisory lock makes two unlocks by one org run one at a time,
 // so a balance can't be spent twice.
-export async function unlockCounty(user, { place, minAcres }) {
+export async function unlockCounty(user, { place, minAcres, projectId }) {
   const orgUid = user?.orgUid;
   if (!orgUid) throw httpError(403, 'Join an organization before unlocking areas.');
   const q = await quote(orgUid, { place, minAcres });
@@ -72,8 +72,8 @@ export async function unlockCounty(user, { place, minAcres }) {
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`credits:${orgUid}`]);
     const bal = (await client.query('SELECT COALESCE(sum(delta), 0)::int AS n FROM credit_ledger WHERE org_uid = $1', [orgUid])).rows[0].n;
     if (bal < q.credits) throw httpError(402, `Unlocking costs ${q.credits} credits; you have ${bal}.`);
-    await client.query(`INSERT INTO county_unlocks (unlock_uid, org_uid, county_fips, county_name, place, min_acres, parcels, credits, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [uid, orgUid, q.fips, `${q.county}, ${q.state}`, q.place, q.minAcres, q.parcels, q.credits, user?.uid ?? null]);
+    await client.query(`INSERT INTO county_unlocks (unlock_uid, org_uid, county_fips, county_name, place, min_acres, parcels, credits, created_by, project_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [uid, orgUid, q.fips, `${q.county}, ${q.state}`, q.place, q.minAcres, q.parcels, q.credits, user?.uid ?? null, Number(projectId) || null]);
     await client.query(`INSERT INTO credit_ledger (entry_uid, org_uid, delta, reason, ref, note, created_by) VALUES ($1, $2, $3, 'county_unlock', $4, $5, $6)`,
       [newId('crd'), orgUid, -q.credits, uid, `${q.county}, ${q.state}: ${q.parcels} parcels of ${q.minAcres}+ acres`, user?.uid ?? null]);
     await client.query('COMMIT');
@@ -114,9 +114,9 @@ export async function loadCounty(fips, minAcres) {
   return rows.length;
 }
 
-export async function listUnlocks(orgUid) {
-  return all(`SELECT unlock_uid, county_name, place, min_acres, parcels, credits, status, loaded, error, created_at FROM county_unlocks
-    WHERE org_uid = ? ORDER BY created_at DESC LIMIT 50`, [orgUid ?? null]);
+export async function listUnlocks(orgUid, projectId = null) {
+  return all(`SELECT unlock_uid, county_name, place, min_acres, parcels, credits, status, loaded, error, created_at, project_id FROM county_unlocks
+    WHERE org_uid = ? ${projectId ? 'AND project_id = ?' : ''} ORDER BY created_at DESC LIMIT 50`, projectId ? [orgUid ?? null, Number(projectId)] : [orgUid ?? null]);
 }
 
 export async function grantCredits(orgUid, amount, note, by = null) {

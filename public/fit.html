@@ -31,6 +31,7 @@
 <script src="feedback.js"></script>
 <script src="score.js"></script>
 <script src="pages.js"></script>
+<script src="areaDialog.js"></script>
 <script>
 (async () => {
   const { esc, api, where, siteTitle, webSearchUrl, ac, date } = pd;
@@ -51,7 +52,7 @@
       <div class="fitLbl"><span class="lbl">${esc(f.label)}</span><span class="basis b-${f.basis}">${BASIS[f.basis]}</span></div>
       <div class="fitBody"><p>${esc(f.finding)}</p>${f.detail ? `<p class="muted small">${esc(f.detail)}</p>` : ''}
         ${f.sources?.length ? `<p class="srcs">${f.sources.map(source).join('')}</p>` : ''}
-        ${f.key === 'zoning' && f.verdict === 'unknown' ? `<p><a class="small" href="areas.html?kind=zoning&area=${encodeURIComponent(place)}&use=${encodeURIComponent(useText)}">Request zoning for ${esc(place)} →</a></p>` : ''}</div>
+        ${f.key === 'zoning' && f.verdict === 'unknown' ? `<p><button type="button" class="linkBtn small" data-zoning="${esc(place)}">Request zoning for ${esc(place)} →</button></p>` : ''}</div>
     </div>`;
 
   let place = '', useText = '';
@@ -99,6 +100,8 @@
         <a class="btn paper" href="${esc(webSearchUrl(s.site))}" target="_blank" rel="noopener">Search Google ↗</a></div><p id="researchMsg" class="msg"></p>`;
   }
   root.addEventListener('click', async (e) => {
+    const z = e.target.closest('[data-zoning]');
+    if (z) { paydirtAreas.open({ projectId, place: z.dataset.zoning.replace(/^Unincorporated /, ''), focus: 'zoning' }); return; }
     if (e.target.id !== 'researchBtn' || !current) return;
     const btn = e.target; btn.disabled = true; btn.textContent = 'Searching the web… (up to a minute)';
     try {

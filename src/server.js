@@ -178,8 +178,21 @@ app.get('/api/areas', wrap(async (req, res) => res.json({ ...(await coverage()),
   balance: await creditBalance(req.user.orgUid), sizes: SIZES, kinds: AREA_KINDS, statuses: AREA_STATUSES })));
 // Unlock a county: quote (free), then unlock (deducts credits and loads the parcels).
 app.get('/api/areas/quote', wrap(async (req, res) => res.json(await quote(req.user.orgUid, { place: req.query.place, minAcres: req.query.minAcres }))));
-app.post('/api/areas/unlock', wrap(async (req, res) => res.json(await unlockCounty(req.user, req.body ?? {}))));
-app.post('/api/areas/requests', wrap(async (req, res) => res.json(await requestArea(req.user, req.userId, req.body ?? {}))));
+app.post('/api/areas/unlock', wrap(async (req, res) => {
+  const { projectId } = req.body ?? {};
+  if (projectId) await projectOr404(projectId, req); // only your organization's projects
+  res.json(await unlockCounty(req.user, req.body ?? {}));
+}));
+// One project's areas: what it has requested and unlocked, plus the credit balance.
+app.get('/api/projects/:id/areas', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id, req);
+  res.json({ requests: await listRequests(req.user.orgUid, p.id), unlocks: await listUnlocks(req.user.orgUid, p.id),
+    balance: await creditBalance(req.user.orgUid), sizes: SIZES, kinds: AREA_KINDS, statuses: AREA_STATUSES });
+}));
+app.post('/api/areas/requests', wrap(async (req, res) => {
+  if (req.body?.projectId) await projectOr404(req.body.projectId, req);
+  res.json(await requestArea(req.user, req.userId, req.body ?? {}));
+}));
 
 // ---------- Feedback (saved here, copied to Notion for review) ----------
 app.post('/api/feedback', wrap(async (req, res) => res.json(await logFeedback(req.user, req.userId, req.body ?? {}))));

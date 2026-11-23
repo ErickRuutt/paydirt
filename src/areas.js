@@ -23,9 +23,10 @@ export async function coverage() {
   };
 }
 
-export async function listRequests(orgUid) {
+export async function listRequests(orgUid, projectId = null) {
   return all(`SELECT request_uid, kind, area, use_text, notes, status, project_id, requested_by_name, created_at, updated_at
-    FROM area_requests WHERE org_uid IS NOT DISTINCT FROM ? ORDER BY created_at DESC LIMIT 100`, [orgUid ?? null]);
+    FROM area_requests WHERE org_uid IS NOT DISTINCT FROM ? ${projectId ? 'AND project_id = ?' : ''} ORDER BY created_at DESC LIMIT 100`,
+  projectId ? [orgUid ?? null, Number(projectId)] : [orgUid ?? null]);
 }
 
 export async function requestArea(user, clerkUserId, { kind, area, useText, notes, projectId } = {}) {

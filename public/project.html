@@ -34,7 +34,7 @@
     </div>
     <div class="heroSide">
       <div class="keyNum"><span class="big" id="heroSaved">–</span><span class="lbl">properties saved</span></div>
-      <a id="openMap" class="btn" href="map.html">Open map</a>
+      <div class="btnRow"><a id="openMap" class="btn" href="map.html">Open map</a><button type="button" id="addArea" class="paper">Add an area</button></div>
     </div>
   </section>
   <section class="block">
@@ -55,6 +55,7 @@
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="property.js"></script>
 <script src="criteria.js"></script>
+<script src="areaDialog.js"></script>
 <script>
 (async () => {
   const { $, esc, api, where, siteTitle, ac, date, labels, STATUSES, STATUS_TEXT } = pd;
@@ -126,6 +127,7 @@
     try { await api(`/api/projects/${id}/saved/${encodeURIComponent(row.dataset.pin)}`, { method: 'PUT', body: { saved: false } }); say('Removed from saved. Its notes are kept if you save it again.'); await load(); }
     catch (err) { say(err.message, true); }
   });
+  $('addArea').onclick = () => paydirtAreas.open({ projectId: id, onChanged: () => load().catch(() => {}) });
   try { await load(); } catch (e) { $('saved').innerHTML = `<p class="msg err">${esc(e.message)}</p>`; }
 })();
 </script>

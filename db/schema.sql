@@ -381,3 +381,6 @@ CREATE TABLE IF NOT EXISTS parcel_research (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS parcel_research_pin ON parcel_research (pin, created_at DESC);
+
+-- Added Nov 23, 2026: unlocks started from inside a project remember it (requests already do).
+ALTER TABLE county_unlocks ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL;

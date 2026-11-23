@@ -136,7 +136,7 @@
         <select data-unlock-size aria-label="Parcel size">${q.sizes.map((x) => `<option value="${x}" ${x === q.minAcres ? 'selected' : ''}>${x}+ acres</option>`).join('')}</select>
         costs <strong>${q.credits.toLocaleString()} credits</strong>. You have ${q.balance.toLocaleString()}.</span>
       <span class="btnRow">${enough ? `<button type="button" data-unlock="${esc(place)}" data-size="${q.minAcres}">Unlock for ${q.credits.toLocaleString()} credits</button>`
-        : `<button type="button" disabled>Not enough credits</button>`}<a href="areas.html">See all areas</a></span>
+        : `<button type="button" disabled>Not enough credits</button>`}<button type="button" class="linkBtn" data-area-dialog="${esc(place)}">More options</button></span>
       ${enough ? '' : '<span class="small">Ask us for credits with the Feedback button; card payments are coming.</span>'}`;
   }
   $('cList').addEventListener('change', (e) => {
@@ -168,7 +168,7 @@
           ${p.hiddenFields?.length ? `<span class="hiddenWhy" title="${esc(p.hiddenBecause.join('; '))}">Hidden: ${esc(Criteria.hiddenNames(p.hiddenFields, catalog).join(', '))}</span>` : ''}
         </div>
         <button type="button" class="rowStar" data-star="${esc(p.pin)}" aria-pressed="${p.saved ? 'true' : 'false'}" title="${p.saved ? 'Saved to this project' : 'Save to this project'}" aria-label="${p.saved ? 'Unsave' : 'Save'} ${esc(siteTitle(p))}">${p.saved ? '★' : '☆'}</button>
-      </li>`).join('') || `<li class="muted">${searching ? 'Nothing found for that search.' : cand.uncovered?.length ? 'No sites: see above.' : 'No sites match this project.'}</li>`;
+      </li>`).join('') || `<li class="muted">${searching ? `Nothing found for “${esc($('cArea').value.trim())}”. <button type="button" class="linkBtn" data-area-dialog="${esc($('cArea').value.trim())}">Add it as a new area →</button>` : cand.uncovered?.length ? 'No sites: see above.' : 'No sites match this project.'}</li>`;
     if (cand.uncovered?.length) {
       $('cList').insertAdjacentHTML('afterbegin', cand.uncovered.map((a) => `<li class="uncovered" data-place="${esc(a)}"><b>${esc(titleCase(a))} isn’t covered yet.</b><span class="muted">Checking what it takes to unlock…</span></li>`).join(''));
       for (const a of cand.uncovered) paintUnlock(a, unlockSize());
@@ -176,6 +176,8 @@
     window.paydirtTaper.apply($('cList'));
   }
   $('cList').onclick = async (e) => {
+    const more = e.target.closest('[data-area-dialog]');
+    if (more) { openAreas(more.dataset.areaDialog); return; }
     const un = e.target.closest('[data-unlock]');
     if (un) { unlock(un); return; }
     const ask = e.target.closest('[data-request-area]');
@@ -316,8 +318,13 @@
     const b = e.target.closest('[data-proj]'); if (!b) return;
     showMenu(false);
     if (b.dataset.proj === 'rename') startRename();
+    else if (b.dataset.proj === 'area') openAreas();
     else window.paydirtBuilder.brief({ revise: true });
   };
+
+  // Add an area from inside this project; a new Where or newly loaded parcels reload the project and its list.
+  $('addAreaBtn').onclick = () => openAreas($('cArea').value.trim());
+  const openAreas = (place = '') => window.paydirtAreas.open({ projectId: project.id, place, onChanged: () => window.paydirtProjects.reload(project.id).catch(showErr) });
 
   function startRename() {
     $('projTitle').hidden = true; menuBtn.hidden = true; $('projRename').hidden = false;

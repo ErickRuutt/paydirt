@@ -4,9 +4,17 @@ import assert from 'node:assert/strict';
 import { one, pool } from '../src/db.js';
 import { getProject, projectCandidate } from '../src/projects.js';
 import { fitStatement } from '../src/fit.js';
+import { normalizeSpec } from '../src/spec.js';
 
 const org = await one('SELECT org_uid FROM projects WHERE id = 1');
-const fh = await getProject(1, org.org_uid);
+// Field House's criteria as of Nov 21, 2026, pinned so edits to the dev project can't change these tests.
+const live = await getProject(1, org.org_uid);
+const fh = { ...live, spec: normalizeSpec({
+  uses: [{ use: 'sports_facility', role: 'primary' }], areas: ['WA:King'],
+  requirements: [{ field: 'zoning.sports_facility', value: ['permitted', 'conditional', 'unknown'] }, { field: 'acres', value: [5, 80] }],
+  preferences: [{ field: 'zoning.sports_facility', weight: 18 }, { field: 'acres', weight: 12, params: { min: 13, max: 40 } }, { field: 'vacancy', weight: 10 },
+    { field: 'owner_signals', weight: 35 }, { field: 'hh200k_10mi', weight: 25 }, { field: 'business_on_site', weight: 10 }],
+}).spec };
 after(() => pool.end());
 
 const statementFor = async (where) => {

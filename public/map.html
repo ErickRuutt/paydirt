@@ -92,11 +92,13 @@
       <div id="projMenu" class="critMenu" role="menu" hidden>
         <button type="button" role="menuitem" data-proj="rename">Rename</button>
         <button type="button" role="menuitem" data-proj="revise">Revise from a new brief</button>
+        <button type="button" role="menuitem" data-proj="area">Add an area…</button>
       </div>
     </div>
     <form id="candForm" class="critSearch" role="search" aria-label="Find a place or parcel">
       <input id="cArea" class="mapSearch" type="search" placeholder="Find an address, parcel # or town" aria-label="Find an address, parcel number or town">
     </form>
+    <button type="button" id="addAreaBtn" class="paper" title="Search a new town or county in this project">+ Add a town or county</button>
     <p class="critSaved">Saved · <b id="critVer">v–</b> · <button type="button" id="critUndo" class="linkish" disabled>Undo</button> · <button type="button" id="critHist" class="linkish">History</button></p>
   <details class="pop popRight"><summary>Layers</summary>
     <div class="popBody" id="layers">
@@ -148,6 +150,7 @@
 <script src="feedback.js"></script>
 <script src="app.js"></script>
 <script src="criteria.js"></script>
+<script src="areaDialog.js"></script>
 <script src="candidates.js"></script>
 <script src="overlays.js"></script>
 <script src="builder.js"></script>
