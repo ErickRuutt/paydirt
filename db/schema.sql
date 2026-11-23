@@ -384,3 +384,7 @@ CREATE INDEX IF NOT EXISTS parcel_research_pin ON parcel_research (pin, created_
 
 -- Added Nov 23, 2026: unlocks started from inside a project remember it (requests already do).
 ALTER TABLE county_unlocks ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL;
+
+-- Added Nov 23, 2026: the county a request is for, so it can show "Ready to unlock" once Paydirt can load that
+-- county and close itself when the county is unlocked.
+ALTER TABLE area_requests ADD COLUMN IF NOT EXISTS county_fips TEXT;

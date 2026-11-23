@@ -35,6 +35,8 @@ window.paydirtAreas = (() => {
     $('[data-close]').onclick = () => dlg.close();
     $('#adForm').onsubmit = (e) => { e.preventDefault(); check(); };
     $('#adResult').addEventListener('click', onAction);
+    // A request whose county Paydirt can now load: go straight to its price.
+    $('#adMine').addEventListener('click', (e) => { const b = e.target.closest('[data-ready]'); if (!b) return; $('#adPlace').value = b.dataset.ready; check(); });
   }
 
   // The project's use, in words, for zoning requests.
@@ -55,9 +57,12 @@ window.paydirtAreas = (() => {
     if (!$('#adSize').options.length) $('#adSize').innerHTML = a.sizes.map((x) => `<option value="${x}">${x}+ acres</option>`).join('');
     const rows = [
       ...a.unlocks.map((u) => ({ when: u.created_at, what: `${u.county_name} unlocked`, detail: `${Number(u.loaded ?? u.parcels).toLocaleString()} parcels of ${Number(u.min_acres)}+ acres · ${u.credits} credits`, status: u.status === 'done' ? ['pass', 'Unlocked'] : u.status === 'failed' ? ['fail', 'Refunded'] : ['review', 'Loading'] })),
-      ...a.requests.map((r) => ({ when: r.created_at, what: r.area, detail: `${a.kinds[r.kind] ?? r.kind}${r.use_text ? ` · for ${r.use_text}` : ''}`, status: [r.status === 'unlocked' ? 'pass' : r.status === 'declined' ? 'fail' : 'review', a.statuses[r.status] ?? r.status] })),
+      ...a.requests.map((r) => ({ when: r.created_at, what: r.area, detail: `${a.kinds[r.kind] ?? r.kind}${r.use_text ? ` · for ${r.use_text}` : ''}`,
+        ready: r.ready ? r.place : null,
+        status: r.ready ? ['pass', 'Ready to unlock'] : [r.status === 'unlocked' ? 'pass' : r.status === 'declined' ? 'fail' : 'review', a.statuses[r.status] ?? r.status] })),
     ].sort((x, y) => new Date(y.when) - new Date(x.when));
-    $('#adMine').innerHTML = rows.length ? `<ul class="adRows">${rows.map((r) => `<li><div><b>${esc(r.what)}</b><span class="muted small">${esc(r.detail)} · ${esc(date(r.when))}</span></div><span class="pill ${r.status[0]}">${esc(r.status[1])}</span></li>`).join('')}</ul>`
+    $('#adMine').innerHTML = rows.length ? `<ul class="adRows">${rows.map((r) => `<li><div><b>${esc(r.what)}</b><span class="muted small">${esc(r.detail)} · ${esc(date(r.when))}</span></div>
+      ${r.ready ? `<button type="button" data-ready="${esc(r.ready)}">Unlock now</button>` : `<span class="pill ${r.status[0]}">${esc(r.status[1])}</span>`}</li>`).join('')}</ul>`
       : '<p class="muted small">Nothing requested or unlocked from this project yet.</p>';
   }
 
@@ -114,10 +119,10 @@ window.paydirtAreas = (() => {
         paintQuote(); say(`Unlocked: ${(r.loaded ?? 0).toLocaleString()} parcels loaded. ${r.balance.toLocaleString()} credits left.`);
         changed();
       } else if (act === 'request') {
-        await call('/api/areas/requests', { method: 'POST', body: { kind: q.supported ? 'city' : 'county', area: `${q.place} (${q.county}, ${q.state})`, useText: useOf(p), projectId: p.id, notes: `From project "${p.name}".` } });
+        await call('/api/areas/requests', { method: 'POST', body: { kind: q.supported ? 'city' : 'county', area: `${q.place} (${q.county}, ${q.state})`, useText: useOf(p), projectId: p.id, countyFips: q.fips, notes: `From project "${p.name}".` } });
         b.textContent = 'Requested ✓'; say('Requested. Its status shows below.');
       } else if (act === 'zoning') {
-        await call('/api/areas/requests', { method: 'POST', body: { kind: 'zoning', area: `${q.place} (${q.county}, ${q.state})`, useText: useOf(p), projectId: p.id, notes: `From project "${p.name}".` } });
+        await call('/api/areas/requests', { method: 'POST', body: { kind: 'zoning', area: `${q.place} (${q.county}, ${q.state})`, useText: useOf(p), projectId: p.id, countyFips: q.fips, notes: `From project "${p.name}".` } });
         b.textContent = 'Zoning requested ✓';
       } else if (act === 'where') {
         await addToWhere(q.place);

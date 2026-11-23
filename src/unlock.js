@@ -1,8 +1,9 @@
 import { all, one, pool } from './db.js';
 import { newId } from './ids.js';
 import { httpError } from './mireye.js';
-import { COUNTIES, countParcels } from './counties.js';
+import { countyOf, countParcels } from './counties.js';
 import { fillAddresses } from './addresses.js';
+import { closeRequestsFor } from './areas.js';
 import { insertMany, setMeta } from '../scripts/lib/pg-script.js';
 import { syncProperties } from '../scripts/lib/properties.js';
 
@@ -44,7 +45,7 @@ export async function creditBalance(orgUid) {
 export async function quote(orgUid, { place, minAcres = 10 }) {
   minAcres = SIZES.includes(Number(minAcres)) ? Number(minAcres) : 10;
   const p = await resolvePlace(place);
-  const c = COUNTIES[p.fips];
+  const c = countyOf(p.fips);
   const loaded = (await one("SELECT count(*)::int AS n FROM candidates WHERE county_fips = ? AND acres >= ? AND excluded IS DISTINCT FROM 'no assessed value (public land, roads or water)'", [p.fips, minAcres])).n;
   const owned = await one(`SELECT unlock_uid, min_acres, created_at FROM county_unlocks WHERE org_uid = ? AND county_fips = ? AND status = 'done'
     AND min_acres <= ? ORDER BY created_at DESC LIMIT 1`, [orgUid ?? null, p.fips, minAcres]);
@@ -64,7 +65,7 @@ export async function unlockCounty(user, { place, minAcres, projectId }) {
   if (!orgUid) throw httpError(403, 'Join an organization before unlocking areas.');
   const q = await quote(orgUid, { place, minAcres });
   if (!q.supported) throw httpError(400, q.why);
-  if (q.unlocked) return { ...q, status: 'done', already: true };
+  if (q.unlocked) { await closeRequestsFor(orgUid, q.fips); return { ...q, status: 'done', already: true }; }
   const uid = newId('unl');
   const client = await pool.connect();
   try {
@@ -82,6 +83,7 @@ export async function unlockCounty(user, { place, minAcres, projectId }) {
   try {
     const n = q.loaded >= q.parcels * 0.95 ? q.loaded : await loadCounty(q.fips, q.minAcres); // already loaded for someone else
     await one("UPDATE county_unlocks SET status = 'done', loaded = ?, finished_at = now() WHERE unlock_uid = ? RETURNING unlock_uid", [n, uid]);
+    await closeRequestsFor(orgUid, q.fips);
     return { ...q, status: 'done', loaded: n, balance: await creditBalance(orgUid) };
   } catch (e) {
     await one("UPDATE county_unlocks SET status = 'failed', error = ?, finished_at = now() WHERE unlock_uid = ? RETURNING unlock_uid", [String(e.message).slice(0, 500), uid]);
@@ -93,11 +95,11 @@ export async function unlockCounty(user, { place, minAcres, projectId }) {
 
 const COLS = ['pin', 'address', 'city', 'postal_city', 'zip', 'acres', 'zoning', 'sports_verdict', 'sports_note', 'zoning_source', 'present_use',
   'land_value', 'impr_value', 'mail_address', 'mail_city_state', 'absentee', 'out_of_state', 'lat', 'lng', 'geometry_json',
-  'years_held', 'years_since_transfer', 'signals', 'excluded', 'tags', 'businesses', 'owner_type', 'county_fips'];
+  'years_held', 'years_since_transfer', 'signals', 'excluded', 'tags', 'businesses', 'owner_type', 'current_use', 'county_fips'];
 
 // Replace a county's rows in one transaction, so a failed load leaves the old rows in place.
 export async function loadCounty(fips, minAcres) {
-  const c = COUNTIES[fips];
+  const c = countyOf(fips);
   const { rows, source, sourceLabel } = await c.load(minAcres);
   const client = await pool.connect();
   try {

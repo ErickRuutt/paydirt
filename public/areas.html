@@ -92,7 +92,7 @@
       <thead><tr><th>Area</th><th>What</th><th>For</th><th>Status</th><th>Asked by</th><th>Requested</th></tr></thead>
       <tbody>${data.requests.map((r) => `<tr><td><b>${esc(r.area)}</b>${r.notes ? `<div class="muted small">${esc(r.notes)}</div>` : ''}</td>
         <td>${esc(data.kinds[r.kind] ?? r.kind)}</td><td>${esc(r.use_text || '—')}</td>
-        <td><span class="pill ${r.status === 'unlocked' ? 'pass' : r.status === 'declined' ? 'fail' : 'review'}">${esc(st[r.status] ?? r.status)}</span></td>
+        <td>${r.ready ? `<button type="button" class="linkBtn" data-ready="${esc(r.place)}">Ready: unlock now →</button>` : `<span class="pill ${r.status === 'unlocked' ? 'pass' : r.status === 'declined' ? 'fail' : 'review'}">${esc(st[r.status] ?? r.status)}</span>`}</td>
         <td>${esc(r.requested_by_name || '—')}</td><td class="nowrap">${date(r.created_at)}</td></tr>`).join('')}</tbody></table></div>`
       : '<div class="empty"><b>No requests yet</b><p class="muted">Ask for a city, a county, or a city’s zoning rules above.</p></div>';
     $('asOf').textContent = data.asOf ? `Parcels loaded ${date(data.asOf)}` : '';
@@ -156,6 +156,10 @@
       $('quote').innerHTML = `<div class="fitBand ok"><b>${esc(r.county)}, ${esc(r.state)} unlocked.</b><span>${(r.loaded ?? 0).toLocaleString()} parcels loaded. ${r.balance.toLocaleString()} credits left. Name a place there in a project’s Where chip to search it.</span></div>`;
       await load();
     } catch (err) { btn.disabled = false; btn.textContent = 'Try again'; $('quote').insertAdjacentHTML('beforeend', `<p class="msg err">${esc(err.message)}</p>`); }
+  });
+  $('requests').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ready]'); if (!b) return;
+    $('qPlace').value = b.dataset.ready; $('quoteForm').requestSubmit(); $('qPlace').scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
   $('places').addEventListener('click', (e) => {
     const b = e.target.closest('[data-ask]'); if (!b) return;
