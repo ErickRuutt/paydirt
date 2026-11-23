@@ -305,3 +305,79 @@ CREATE INDEX IF NOT EXISTS feedback_created ON feedback (created_at DESC);
 
 -- Added Nov 21, 2026: one row per project version, so two saves can never write the same version.
 CREATE UNIQUE INDEX IF NOT EXISTS project_spec_history_version ON project_spec_history (project_id, version);
+
+-- Added Nov 22, 2026: requests to unlock more areas (a county, a city, or a city's zoning). Also copied to
+-- the Notion feedback table; status here is what the app shows the person who asked.
+CREATE TABLE IF NOT EXISTS area_requests (
+  request_uid TEXT PRIMARY KEY,             -- area_…
+  org_uid TEXT,
+  user_uid TEXT REFERENCES users(user_uid),
+  requested_by_name TEXT,
+  kind TEXT NOT NULL DEFAULT 'city',        -- county / city / zoning
+  area TEXT NOT NULL,
+  use_text TEXT,
+  notes TEXT,
+  project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'requested', -- requested / in_progress / unlocked / declined
+  feedback_uid TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS area_requests_org ON area_requests (org_uid, created_at DESC);
+
+-- Added Nov 23, 2026: more than one county. Existing rows are King County.
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS county_fips TEXT;
+UPDATE candidates SET county_fips = '53033' WHERE county_fips IS NULL;
+CREATE INDEX IF NOT EXISTS candidates_county ON candidates (county_fips);
+
+-- Added Nov 23, 2026: credits. One row per change to an organization's balance (balance = sum of delta).
+-- Grants are added by hand while testing (npm run credits:grant); card purchases come later.
+CREATE TABLE IF NOT EXISTS credit_ledger (
+  entry_uid TEXT PRIMARY KEY,               -- crd_…
+  org_uid TEXT NOT NULL,
+  delta INTEGER NOT NULL,                   -- + grant or refund, − spend
+  reason TEXT NOT NULL,                     -- grant / county_unlock / refund
+  ref TEXT,                                 -- e.g. the unlock_uid
+  note TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS credit_ledger_org ON credit_ledger (org_uid, created_at DESC);
+
+-- Added Nov 23, 2026: a county's parcels bought by an organization (the quote they accepted, and how loading went).
+CREATE TABLE IF NOT EXISTS county_unlocks (
+  unlock_uid TEXT PRIMARY KEY,              -- unl_…
+  org_uid TEXT NOT NULL,
+  county_fips TEXT NOT NULL,
+  county_name TEXT NOT NULL,
+  place TEXT,                               -- what the person typed, e.g. Sequim
+  min_acres DOUBLE PRECISION NOT NULL,
+  parcels INTEGER NOT NULL,                 -- count at quote time
+  credits INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'loading',   -- loading / done / failed
+  loaded INTEGER,
+  error TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS county_unlocks_org ON county_unlocks (org_uid, created_at DESC);
+
+-- Added Nov 23, 2026: where a parcel's address came from (county address points fill gaps in the parcel layer),
+-- and the closest road for parcels with no address at all (shown as "Near …", never as the address).
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS address_source TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS address_near TEXT;
+
+-- Added Nov 23, 2026: web research on a parcel (findings with the pages they came from). Shared across
+-- organizations like every other parcel fact; the organization that ran it paid the credit.
+CREATE TABLE IF NOT EXISTS parcel_research (
+  research_uid TEXT PRIMARY KEY,            -- rsc_…
+  pin TEXT NOT NULL,
+  property_uid TEXT,
+  org_uid TEXT,
+  findings TEXT NOT NULL,                   -- JSON [{category, text, sources: [{url, title}]}]
+  searches INTEGER,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS parcel_research_pin ON parcel_research (pin, created_at DESC);

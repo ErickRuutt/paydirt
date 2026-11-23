@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fit statement · Paydirt</title>
+<link rel="icon" href="brand/simple.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script>try { const t = localStorage.getItem('paydirt.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* storage blocked */ }</script>
+</head>
+<body class="page">
+<nav class="sidenav" aria-label="Main">
+  <a href="index.html" class="wordmark" title="Your projects">Pay<span>dirt</span></a>
+  <div class="navLinks"><a href="index.html">Projects</a><a href="map.html" id="navMap">Map</a><a href="project.html" id="navSaved" aria-current="page">Saved</a><a href="areas.html">Areas</a></div>
+  <div class="navFoot">
+    <button type="button" id="feedbackBtn" class="feedbackBtn">Feedback</button>
+    <span id="orgName" class="lblish"></span>
+    <div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
+    <div id="userButton"></div>
+  </div>
+</nav>
+
+<main class="page-in" id="fit"><p class="muted">Building the fit statement…</p></main>
+
+<div id="signin" hidden><div class="signinCard"><h1>Pay<span style="color:var(--accent)">dirt</span></h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
+<script src="auth.js"></script>
+<script src="theme.js"></script>
+<script src="feedback.js"></script>
+<script src="score.js"></script>
+<script src="pages.js"></script>
+<script>
+(async () => {
+  const { esc, api, where, siteTitle, webSearchUrl, ac, date } = pd;
+  const q = new URLSearchParams(location.search);
+  const projectId = Number(q.get('project'));
+  const pin = q.get('pin');
+  const root = document.getElementById('fit');
+  const MARK = { favorable: ['pass', 'Favorable'], neutral: ['review', 'Neutral'], unfavorable: ['fail', 'Unfavorable'], unknown: ['unknown', 'Unknown'] };
+  const BASIS = { known: 'Known', likely: 'Likely', unknown: 'Not checked' };
+  const OVERALL_CLASS = { strong: 'pass', conditions: 'review', no: 'fail', evidence: 'unknown' };
+  const back = `project.html?id=${projectId}`;
+  document.getElementById('navSaved').href = back;
+  document.getElementById('navMap').href = `map.html?project=${projectId}`;
+
+  const source = (s) => `<span class="src">${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>` : esc(s.label)}${s.asOf ? ` · ${esc(date(s.asOf))}` : ''}</span>`;
+  const row = (f) => `<div class="fitRow" data-verdict="${f.verdict}">
+      <span class="fitMark ${MARK[f.verdict][0]}" title="${MARK[f.verdict][1]}" aria-label="${MARK[f.verdict][1]}"></span>
+      <div class="fitLbl"><span class="lbl">${esc(f.label)}</span><span class="basis b-${f.basis}">${BASIS[f.basis]}</span></div>
+      <div class="fitBody"><p>${esc(f.finding)}</p>${f.detail ? `<p class="muted small">${esc(f.detail)}</p>` : ''}
+        ${f.sources?.length ? `<p class="srcs">${f.sources.map(source).join('')}</p>` : ''}
+        ${f.key === 'zoning' && f.verdict === 'unknown' ? `<p><a class="small" href="areas.html?kind=zoning&area=${encodeURIComponent(place)}&use=${encodeURIComponent(useText)}">Request zoning for ${esc(place)} →</a></p>` : ''}</div>
+    </div>`;
+
+  let place = '', useText = '';
+  function statement(s) {
+    place = s.site.city ? s.site.city.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : 'Unincorporated King County';
+    useText = s.use ?? '';
+    document.title = `${siteTitle(s.site)} · Fit statement · Paydirt`;
+    return `
+    <p class="crumb lblish"><a href="${back}">${esc(s.project.name)}</a> / Fit statement</p>
+    <section class="fitHead">
+      <div>
+        <p class="lbl">Fit statement · ${esc(s.project.name)}</p>
+        <h1 class="title">${esc(siteTitle(s.site))}</h1>
+        <p class="muted">${ac(s.site.acres)} · ${esc(s.site.zoning || 'No zone')} · ${esc(where(s.site))}</p>
+      </div>
+      <div class="fitVerdict ${OVERALL_CLASS[s.overall.key]}"><span class="lbl">Verdict</span><b>${esc(s.overall.label)}</b>${s.site.score != null ? `<span class="lblish">Score ${s.site.score}</span>` : ''}</div>
+    </section>
+    <p class="argument">${esc(s.argument)}</p>
+    ${s.dealBreakers.length ? `<section class="fitBand bad"><span class="lbl">Deal-breakers</span><ul>${s.dealBreakers.map((b) => `<li><b>${esc(b.label)}.</b> ${esc(b.text)}</li>`).join('')}</ul></section>` : ''}
+    ${s.conditions.length ? `<section class="fitBand warn"><span class="lbl">Conditions</span><ul>${s.conditions.map((b) => `<li><b>${esc(b.label)}.</b> ${esc(b.text)}</li>`).join('')}</ul></section>` : ''}
+    ${s.sections.map((sec, i) => `<section class="block fitSec">
+      <div class="block-head"><h2 class="title"><span class="num">${i + 1}</span>${esc(sec.title)}</h2>${sec.later ? '<span class="lblish">Coming later</span>' : ''}</div>
+      ${sec.findings.map(row).join('')}
+    </section>`).join('')}
+    <section class="block" id="webSec">${webSection(s)}</section>
+    <section class="block">
+      <div class="block-head"><h2 class="title">Due diligence</h2><span class="lblish">${s.diligence.length} items</span></div>
+      <ol class="diligence">${s.diligence.map((d) => `<li><span class="lbl">${esc(d.label)}</span> ${esc(d.text)}</li>`).join('')}</ol>
+    </section>
+    <footer class="fitFoot lblish">Run against ${esc(s.project.name)} criteria version ${s.project.version} · ${s.coverage.known} of ${s.coverage.total} core items known · ${esc(new Date(s.generatedAt).toLocaleString())} ·
+      <a href="map.html?project=${projectId}&pin=${encodeURIComponent(s.site.pin)}">Open in map</a> · <a href="fit.html?project=${projectId}">Compare saved sites</a></footer>`;
+  }
+
+  // Web research: unverified, cited, and never part of the verdict.
+  let current = null;
+  function webSection(s) {
+    current = s;
+    const w = s.web;
+    const list = w ? `<ul class="webFindings">${w.findings.map((f) => `<li><span class="lbl">${esc(f.category)}</span><div><p>${esc(f.text)}</p>
+        ${f.sources.length ? `<p class="srcs">${f.sources.map((x) => `<span class="src"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a></span>`).join('')}</p>` : '<p class="src">No source page cited: treat with care.</p>'}</div></li>`).join('')}</ul>
+        <p class="lblish">Researched ${esc(date(w.createdAt))}. Found on the public web and not verified by Paydirt.</p>` : '<p class="muted">Not researched yet. Paydirt can search the web for listings, permits, land-use notices, news and businesses at this site, with a link to every source.</p>';
+    return `<div class="block-head"><h2 class="title">From the web</h2><span class="lblish">Unverified</span></div>
+      ${list}
+      <div class="btnRow"><button type="button" id="researchBtn">${w ? 'Research again' : 'Research this parcel'} · ${s.researchCredits} credit${s.researchCredits === 1 ? '' : 's'}</button>
+        <a class="btn paper" href="${esc(webSearchUrl(s.site))}" target="_blank" rel="noopener">Search Google ↗</a></div><p id="researchMsg" class="msg"></p>`;
+  }
+  root.addEventListener('click', async (e) => {
+    if (e.target.id !== 'researchBtn' || !current) return;
+    const btn = e.target; btn.disabled = true; btn.textContent = 'Searching the web… (up to a minute)';
+    try {
+      const r = await api(`/api/projects/${projectId}/research/${encodeURIComponent(current.site.pin)}`, { method: 'POST' });
+      current.web = { findings: r.findings, createdAt: r.createdAt };
+      document.getElementById('webSec').innerHTML = webSection(current);
+      document.getElementById('researchMsg').textContent = `${r.balance.toLocaleString()} credits left.`;
+    } catch (err) { btn.disabled = false; btn.textContent = 'Try again'; document.getElementById('researchMsg').className = 'msg err'; document.getElementById('researchMsg').textContent = err.message; }
+  });
+
+  function compare(r) {
+    document.title = `Compare · ${r.project.name} · Paydirt`;
+    const list = r.statements;
+    if (!list.length) return `<p class="crumb lblish"><a href="${back}">${esc(r.project.name)}</a> / Compare</p>
+      <div class="empty"><b>No saved sites to compare</b><p class="muted">Save sites from the map, then come back here.</p></div>`;
+    const sections = list[0].sections;
+    const cell = (s, key) => { const f = s.sections.flatMap((x) => x.findings).find((x) => x.key === key); return f ? `<td title="${esc(f.finding)}"><span class="fitMark ${MARK[f.verdict][0]}" aria-label="${MARK[f.verdict][1]}"></span><span class="small">${esc(f.finding.length > 90 ? f.finding.slice(0, 88) + '…' : f.finding)}</span></td>` : '<td></td>'; };
+    return `
+    <p class="crumb lblish"><a href="${back}">${esc(r.project.name)}</a> / Compare</p>
+    <section class="fitHead"><div><p class="lbl">Compare · ${esc(r.project.name)}</p><h1 class="title">${list.length} saved sites</h1>
+      <p class="muted">Every finding side by side. Passed sites are left out. Open a site for its full statement and sources.</p></div></section>
+    <div class="table-wrap"><table class="grid compare">
+      <thead><tr><th></th>${list.map((s) => `<th><a href="fit.html?project=${projectId}&pin=${encodeURIComponent(s.site.pin)}">${esc(siteTitle(s.site))}</a>
+        <div class="muted small">${ac(s.site.acres)} · ${esc(where(s.site))}</div>
+        <div class="fitVerdict sm ${OVERALL_CLASS[s.overall.key]}"><b>${esc(s.overall.label)}</b>${s.site.score != null ? ` <span class="lblish">· ${s.site.score}</span>` : ''}</div></th>`).join('')}</tr></thead>
+      <tbody>${sections.map((sec, i) => `<tr class="secRow"><th colspan="${list.length + 1}"><span class="num">${i + 1}</span>${esc(sec.title)}</th></tr>
+        ${sec.findings.map((f) => `<tr><th class="lbl">${esc(f.label)}</th>${list.map((s) => cell(s, f.key)).join('')}</tr>`).join('')}`).join('')}
+        <tr class="secRow"><th colspan="${list.length + 1}">Coverage</th></tr>
+        <tr><th class="lbl">Core items known</th>${list.map((s) => `<td>${s.coverage.known} of ${s.coverage.total}</td>`).join('')}</tr>
+      </tbody></table></div>`;
+  }
+
+  try {
+    if (!projectId) throw new Error('Open a fit statement from a saved site.');
+    root.innerHTML = pin ? statement(await api(`/api/projects/${projectId}/fit/${encodeURIComponent(pin)}`)) : compare(await api(`/api/projects/${projectId}/fit`));
+  } catch (e) { root.innerHTML = `<p class="msg err">${esc(e.message)}</p>`; }
+})();
+</script>
+</body>
+</html>

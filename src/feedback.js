@@ -6,7 +6,7 @@ import { httpError } from './mireye.js';
 // In-app feedback: saved in Postgres first (so nothing is lost), then copied to a Notion table
 // for review. Notion needs NOTION_TOKEN (an internal integration with access to the Feedback page)
 // and NOTION_FEEDBACK_DB (created by `npm run setup:notion`).
-export const FEEDBACK_KINDS = { idea: 'Idea', problem: 'Problem', question: 'Question', data: 'Data issue' };
+export const FEEDBACK_KINDS = { idea: 'Idea', problem: 'Problem', question: 'Question', data: 'Data issue', area: 'Area request' };
 const NOTION_VERSION = '2022-06-28';
 export const hasNotion = () => Boolean(process.env.NOTION_TOKEN && process.env.NOTION_FEEDBACK_DB);
 

@@ -158,7 +158,7 @@ $('filter').onchange = renderList;
 // ---------- Search ----------
 async function runSearch(cursor) {
   const btn = cursor ? $('moreBtn') : $('searchBtn');
-  btn.disabled = true; $('searchMsg').className = 'msg'; $('searchMsg').textContent = 'Searching Mireye… this can take a minute.';
+  btn.disabled = true; $('searchMsg').className = 'msg'; $('searchMsg').textContent = 'Searching… this can take a minute.';
   try {
     const r = await api('/api/search', { method: 'POST', body: {
       acresMin: +$('acresMin').value, acresMax: +$('acresMax').value,
@@ -230,7 +230,7 @@ function renderDetail(p) {
       <textarea id="notes" placeholder="Notes: site visit, owner contact, broker intel…">${esc(p.notes)}</textarea>
       <button id="saveReview" class="secondary" type="button">Save review</button></section>
     <section><h2>Enrich</h2>
-      <p class="muted" style="font-size:12px;margin:0">Full Mireye profile for this parcel (zoning, terrain, constraints presets). $0.02 if matched.</p>
+      <p class="muted" style="font-size:12px;margin:0">Full profile for this parcel (zoning, terrain, constraints). $0.02 if matched.</p>
       <button id="enrichBtn" type="button">Enrich · $0.02</button><p id="enrichMsg" class="msg"></p><div id="enrichOut"></div></section>`;
   $('detail').hidden = false;
 

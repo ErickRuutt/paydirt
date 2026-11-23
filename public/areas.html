@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Areas · Paydirt</title>
+<link rel="icon" href="brand/simple.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script>try { const t = localStorage.getItem('paydirt.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* storage blocked */ }</script>
+</head>
+<body class="page">
+<nav class="sidenav" aria-label="Main">
+  <a href="index.html" class="wordmark" title="Your projects">Pay<span>dirt</span></a>
+  <div class="navLinks"><a href="index.html">Projects</a><a href="map.html" id="navMap">Map</a><a href="project.html" id="navSaved">Saved</a><a href="areas.html" aria-current="page">Areas</a></div>
+  <div class="navFoot">
+    <button type="button" id="feedbackBtn" class="feedbackBtn">Feedback</button>
+    <span id="orgName" class="lblish"></span>
+    <div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
+    <div id="userButton"></div>
+  </div>
+</nav>
+
+<main class="page-in">
+  <section class="fitHead">
+    <div>
+      <p class="lbl">Areas</p>
+      <h1 class="title">where paydirt can look</h1>
+      <p class="lede">Each area needs its parcels loaded and each city's zoning read before sites there can be judged. Name a town and Paydirt finds its county, counts the parcels and prices the unlock in credits. Places it can’t unlock yet can be requested.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head"><h2 class="title"><i class="tilt" aria-hidden="true"></i>unlock a county</h2><span id="balance" class="lblish"></span></div>
+    <form id="quoteForm" class="areaForm">
+      <label>Town, city or county<input id="qPlace" required maxlength="120" placeholder="e.g. Sequim"></label>
+      <label>Parcel size<select id="qSize"></select></label>
+      <div class="wide btnRow"><button type="submit" id="qBtn">Get price</button></div>
+    </form>
+    <div id="quote"></div>
+    <div id="unlocks"></div>
+  </section>
+
+  <section class="block">
+    <div class="block-head"><h2 class="title"><i class="tilt" aria-hidden="true"></i>request an area</h2><span class="lblish">For places Paydirt can’t unlock yet, or a city’s zoning</span></div>
+    <form id="reqForm" class="areaForm">
+      <fieldset class="wide" aria-label="What do you need?">
+        <label><input type="radio" name="kind" value="city" checked> A town or city not covered yet</label>
+        <label><input type="radio" name="kind" value="county"> A whole county</label>
+        <label><input type="radio" name="kind" value="zoning"> Zoning rules for a covered city</label>
+      </fieldset>
+      <label>Area<input id="area" required maxlength="200" placeholder="e.g. Sequim, Snohomish County, Seattle"></label>
+      <label>For what kind of project<input id="useText" maxlength="300" placeholder="e.g. sports facility, gas station, housing"></label>
+      <label class="wide">Notes<textarea id="notes" rows="3" maxlength="4000" placeholder="Neighborhoods, parcel sizes, deadlines…"></textarea></label>
+      <div class="wide btnRow"><button type="submit" id="reqBtn">Request area</button><p id="msg" class="msg"></p></div>
+    </form>
+  </section>
+
+  <section class="block">
+    <div class="block-head"><h2 class="title"><i class="tilt" aria-hidden="true"></i>your requests</h2><span id="reqCount" class="lblish"></span></div>
+    <div id="requests"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section class="block">
+    <div class="block-head"><h2 class="title"><i class="tilt" aria-hidden="true"></i>covered now</h2><span id="asOf" class="lblish"></span></div>
+    <div id="counties"></div>
+    <div id="places"><p class="muted">Loading…</p></div>
+  </section>
+</main>
+
+<div id="signin" hidden><div class="signinCard"><h1>Pay<span style="color:var(--accent)">dirt</span></h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
+<script src="auth.js"></script>
+<script src="theme.js"></script>
+<script src="feedback.js"></script>
+<script src="pages.js"></script>
+<script>
+(async () => {
+  const { $, esc, api, date } = pd;
+  const titleCase = (s) => String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  const q = new URLSearchParams(location.search);
+  // Arriving from a fit statement ("request zoning for X") pre-fills the form.
+  if (q.get('area')) $('area').value = q.get('area');
+  if (q.get('use')) $('useText').value = q.get('use');
+  if (q.get('kind')) { const r = document.querySelector(`input[name=kind][value="${CSS.escape(q.get('kind'))}"]`); if (r) r.checked = true; }
+  let data;
+  function paint() {
+    const st = data.statuses;
+    $('reqCount').textContent = `${data.requests.length} requests`;
+    $('requests').innerHTML = data.requests.length ? `<div class="table-wrap"><table class="grid">
+      <thead><tr><th>Area</th><th>What</th><th>For</th><th>Status</th><th>Asked by</th><th>Requested</th></tr></thead>
+      <tbody>${data.requests.map((r) => `<tr><td><b>${esc(r.area)}</b>${r.notes ? `<div class="muted small">${esc(r.notes)}</div>` : ''}</td>
+        <td>${esc(data.kinds[r.kind] ?? r.kind)}</td><td>${esc(r.use_text || '—')}</td>
+        <td><span class="pill ${r.status === 'unlocked' ? 'pass' : r.status === 'declined' ? 'fail' : 'review'}">${esc(st[r.status] ?? r.status)}</span></td>
+        <td>${esc(r.requested_by_name || '—')}</td><td class="nowrap">${date(r.created_at)}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="empty"><b>No requests yet</b><p class="muted">Ask for a city, a county, or a city’s zoning rules above.</p></div>';
+    $('asOf').textContent = data.asOf ? `Parcels loaded ${date(data.asOf)}` : '';
+    $('counties').innerHTML = data.counties.map((c) => `<p><b>${esc(c.name)}</b> <span class="muted">· ${c.sites.toLocaleString()} sites of ${c.minAcres}+ acres</span></p>`).join('');
+    $('places').innerHTML = `<div class="table-wrap"><table class="grid">
+      <thead><tr><th>Place</th><th>Sites</th><th>Zoning read</th><th></th></tr></thead>
+      <tbody>${data.places.map((p) => { const pct = p.sites ? Math.round((p.zoned / p.sites) * 100) : 0; return `<tr>
+        <td>${esc(p.city ? titleCase(p.city) : p.place)}</td><td>${p.sites.toLocaleString()}</td>
+        <td class="nowrap"><span class="meter" aria-hidden="true"><i style="width:${pct}%"></i></span>${pct}%</td>
+        <td>${pct < 90 ? `<button type="button" class="linkBtn" data-ask="${esc(p.city ? titleCase(p.city) : p.place)}">Request zoning</button>` : ''}</td></tr>`; }).join('')}</tbody></table></div>
+      <p class="muted small">"Zoning read" is the share of sites where Paydirt knows whether a sports facility is allowed. Other uses are read on request.</p>`;
+  }
+  async function load() { data = await api('/api/areas'); paint(); paintUnlocks(); }
+  const UNLOCK_STATUS = { loading: ['review', 'Loading'], done: ['pass', 'Unlocked'], failed: ['fail', 'Failed, refunded'] };
+  function paintUnlocks() {
+    $('balance').textContent = `${data.balance.toLocaleString()} credits`;
+    if (!$('qSize').options.length) $('qSize').innerHTML = data.sizes.map((x) => `<option value="${x}" ${x === 10 ? 'selected' : ''}>${x}+ acres</option>`).join('');
+    $('unlocks').innerHTML = data.unlocks.length ? `<div class="table-wrap"><table class="grid">
+      <thead><tr><th>County</th><th>Asked for</th><th>Parcels</th><th>Credits</th><th>Status</th><th>When</th></tr></thead>
+      <tbody>${data.unlocks.map((u) => `<tr><td><b>${esc(u.county_name)}</b></td><td>${esc(u.place || '—')}</td>
+        <td>${Number(u.loaded ?? u.parcels).toLocaleString()} of ${Number(u.min_acres)}+ ac</td><td>${u.credits.toLocaleString()}</td>
+        <td><span class="pill ${UNLOCK_STATUS[u.status]?.[0] ?? 'review'}">${UNLOCK_STATUS[u.status]?.[1] ?? esc(u.status)}</span>${u.error ? `<div class="muted small">${esc(u.error)}</div>` : ''}</td>
+        <td class="nowrap">${date(u.created_at)}</td></tr>`).join('')}</tbody></table></div>` : '';
+  }
+  let lastQuote = null;
+  function paintQuote(q) {
+    lastQuote = q;
+    const county = `${q.county}, ${q.state}`;
+    if (!q.supported) {
+      $('quote').innerHTML = `<div class="fitBand warn"><b>${esc(q.place)} is in ${esc(county)}.</b><span>${esc(q.why)}</span>
+        <span class="btnRow"><button type="button" id="qRequest">Request ${esc(q.county)}</button></span></div>`;
+      return;
+    }
+    if (q.unlocked) {
+      $('quote').innerHTML = `<div class="fitBand ok"><b>${esc(county)} is already unlocked${q.minAcres ? ` for ${q.minAcres}+ acres` : ''}.</b><span>${q.loaded.toLocaleString()} parcels are in Paydirt. Name it in a project’s Where chip to search it.</span></div>`;
+      return;
+    }
+    const enough = q.balance >= q.credits;
+    $('quote').innerHTML = `<div class="fitBand ${enough ? 'ok' : 'warn'}"><b>${esc(q.place)} is in ${esc(county)}.</b>
+      <span>Unlocking the county’s ${q.parcels.toLocaleString()} parcels of ${q.minAcres}+ acres costs <strong>${q.credits.toLocaleString()} credits</strong>. You have ${q.balance.toLocaleString()}.</span>
+      <span class="small">You get every ${q.minAcres}+ acre parcel in the county with its owner, zoning, assessed values and last deed date. Zoning rules for your use are read on request.</span>
+      <span class="btnRow">${enough ? `<button type="button" id="qUnlock">Unlock for ${q.credits.toLocaleString()} credits</button>` : '<button type="button" disabled>Not enough credits</button><span class="small">Ask us for credits with the Feedback button; card payments are coming.</span>'}</span></div>`;
+  }
+  $('quoteForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('qBtn').disabled = true; $('quote').innerHTML = '<p class="muted">Finding the county and counting parcels…</p>';
+    try { paintQuote(await api(`/api/areas/quote?${new URLSearchParams({ place: $('qPlace').value, minAcres: $('qSize').value })}`)); }
+    catch (err) { $('quote').innerHTML = `<p class="msg err">${esc(err.message)}</p>`; }
+    finally { $('qBtn').disabled = false; }
+  });
+  $('quote').addEventListener('click', async (e) => {
+    if (e.target.id === 'qRequest') {
+      const q = lastQuote; $('area').value = `${q.place} (${q.county}, ${q.state})`;
+      document.querySelector('input[name=kind][value=county]').checked = true;
+      $('area').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('useText').focus(); return;
+    }
+    if (e.target.id !== 'qUnlock') return;
+    const btn = e.target; btn.disabled = true; btn.textContent = 'Unlocking… loading parcels (about a minute)';
+    try {
+      const r = await api('/api/areas/unlock', { method: 'POST', body: { place: lastQuote.place, minAcres: lastQuote.minAcres } });
+      $('quote').innerHTML = `<div class="fitBand ok"><b>${esc(r.county)}, ${esc(r.state)} unlocked.</b><span>${(r.loaded ?? 0).toLocaleString()} parcels loaded. ${r.balance.toLocaleString()} credits left. Name a place there in a project’s Where chip to search it.</span></div>`;
+      await load();
+    } catch (err) { btn.disabled = false; btn.textContent = 'Try again'; $('quote').insertAdjacentHTML('beforeend', `<p class="msg err">${esc(err.message)}</p>`); }
+  });
+  $('places').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ask]'); if (!b) return;
+    $('area').value = b.dataset.ask; document.querySelector('input[name=kind][value=zoning]').checked = true;
+    $('area').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('useText').focus();
+  });
+  $('reqForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('reqBtn'); btn.disabled = true; $('msg').className = 'msg'; $('msg').textContent = 'Sending…';
+    try {
+      await api('/api/areas/requests', { method: 'POST', body: { kind: document.querySelector('input[name=kind]:checked').value, area: $('area').value, useText: $('useText').value, notes: $('notes').value } });
+      $('msg').textContent = 'Requested. You’ll see its status below.';
+      $('area').value = ''; $('notes').value = '';
+      await load();
+    } catch (err) { $('msg').className = 'msg err'; $('msg').textContent = err.message; }
+    finally { btn.disabled = false; }
+  });
+  try { await load(); } catch (e) { $('places').innerHTML = `<p class="msg err">${esc(e.message)}</p>`; }
+})();
+</script>
+</body>
+</html>

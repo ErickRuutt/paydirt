@@ -169,17 +169,18 @@ for (const f of gis) {
   rows.push([pin, p.ADDR_FULL?.trim() || null, city, postal, p.ZIP5 || null, p.KCA_ACRES, zone, sports.verdict, sports.note, sports.source ?? null, use, p.PROPTYPE ?? null,
     land, impr, acct.taxStat || null, cu, acct.addr || null, acct.cityState || null, absentee, outOfState, lat, lng, JSON.stringify(f.geometry),
     yh ?? null, own.yearsSinceTransfer ?? null, JSON.stringify(signals), mkt.rich, mkt.share, mkt.kids,
-    excluded, JSON.stringify([...tags]), JSON.stringify(businesses), oType, acct.attn || null]);
+    excluded, JSON.stringify([...tags]), JSON.stringify(businesses), oType, acct.attn || null, '53033']);
 }
 
 const COLS = ['pin', 'address', 'city', 'postal_city', 'zip', 'acres', 'zoning', 'sports_verdict', 'sports_note', 'zoning_source', 'present_use', 'prop_type',
   'land_value', 'impr_value', 'tax_status', 'current_use', 'mail_address', 'mail_city_state', 'absentee', 'out_of_state', 'lat', 'lng', 'geometry_json',
   'years_held', 'years_since_transfer', 'signals', 'hh200k_10mi', 'share200k_10mi', 'kids_share_10mi',
-  'excluded', 'tags', 'businesses', 'owner_type', 'mail_attn'];
+  'excluded', 'tags', 'businesses', 'owner_type', 'mail_attn', 'county_fips'];
 
 const client = await connect();
 await client.query('BEGIN');
-await client.query('DELETE FROM candidates');
+// Only King County's rows: other counties are loaded by their own adapters (src/counties.js).
+await client.query("DELETE FROM candidates WHERE county_fips = '53033' OR county_fips IS NULL");
 await insertMany(client, 'candidates', COLS, rows);
 // Every parcel keeps a permanent property_uid across rebuilds (the master registry).
 await syncProperties(client, { source: 'kc_assessor', countyFips: '53033', sourceIds: rows.map((r) => r[0]) });

@@ -85,3 +85,9 @@ test('an excluded parcel opened directly is hidden as excluded', async (t) => {
   assert.deepEqual(c.hiddenFields, ['excluded']);
   assert.deepEqual(c.hiddenBecause, [ex.excluded]);
 });
+
+test('a place with no parcels loaded comes back as uncovered, not just an empty list', async () => {
+  const p = await createProject({ name: 'test: uncovered', spec: { ...spec, requirements: [...spec.requirements, { field: 'area', value: ['Nowheresville', 'Redmond'] }] } }, user); made.push(p.id);
+  const res = await projectCandidates(p, { limit: 1 });
+  assert.deepEqual(res.uncovered, ['Nowheresville']);
+});

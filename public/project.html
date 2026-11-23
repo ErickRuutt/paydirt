@@ -15,7 +15,7 @@
 <body class="page">
 <nav class="sidenav" aria-label="Main">
   <a href="index.html" class="wordmark" title="Your projects">Pay<span>dirt</span></a>
-  <div class="navLinks"><a href="index.html">Projects</a><a href="map.html" id="navMap">Map</a><a href="project.html" id="navSaved" aria-current="page">Saved</a></div>
+  <div class="navLinks"><a href="index.html">Projects</a><a href="map.html" id="navMap">Map</a><a href="project.html" id="navSaved" aria-current="page">Saved</a><a href="areas.html">Areas</a></div>
   <div class="navFoot">
     <button type="button" id="feedbackBtn" class="feedbackBtn">Feedback</button>
     <span id="orgName" class="lblish"></span>
@@ -38,7 +38,7 @@
     </div>
   </section>
   <section class="block">
-    <div class="block-head"><h2 class="title"><i class="tilt" aria-hidden="true"></i>saved</h2><span id="savedCount" class="lblish"></span></div>
+    <div class="block-head"><h2 class="title"><i class="tilt" aria-hidden="true"></i>saved</h2><span class="btnRow"><span id="savedCount" class="lblish"></span><a id="compareBtn" class="btn paper" href="fit.html">Compare fit</a></span></div>
     <div id="statusFilter" class="statusFilter" role="group" aria-label="Show status"></div>
     <div id="saved"><p class="muted">Loading…</p></div>
     <p id="msg" class="msg"></p>
@@ -80,6 +80,7 @@
     $('pBrief').textContent = r.project.brief || '';
     $('pMeta').textContent = `Version ${r.project.spec_version} · ${r.project.project_uid}`;
     $('openMap').href = `map.html?project=${r.project.id}`;
+    $('compareBtn').href = `fit.html?project=${r.project.id}`;
     $('savedCount').textContent = `${r.saved.length} properties`; $('heroSaved').textContent = r.saved.length;
     paint();
   }
@@ -95,7 +96,7 @@
         <td><select data-status aria-label="Status">${STATUSES.map((s) => `<option value="${s}" ${p.status === s ? 'selected' : ''}>${STATUS_TEXT[s]}</option>`).join('')}</select></td>
         <td><textarea data-notes rows="2" placeholder="Site visit, owner contact…">${esc(p.notes)}</textarea></td>
         <td class="nowrap">${date(p.saved_at)}</td>
-        <td class="nowrap"><a href="map.html?project=${id}&pin=${encodeURIComponent(p.pin)}">Map</a> · <button type="button" class="linkBtn" data-unsave>Remove</button></td>
+        <td class="nowrap"><a href="fit.html?project=${id}&pin=${encodeURIComponent(p.pin)}">Fit</a> · <a href="map.html?project=${id}&pin=${encodeURIComponent(p.pin)}">Map</a> · <button type="button" class="linkBtn" data-unsave>Remove</button></td>
       </tr>`).join('')}</tbody></table></div>`
       : rows.length ? `<div class="empty"><b>No ${esc(STATUS_TEXT[show])} properties</b><p class="muted">Pick All to see every saved property.</p></div>`
       : `<div class="empty"><b>Nothing saved to this project yet</b><p class="muted">Open the map and tap ☆ on a parcel.</p></div>`;

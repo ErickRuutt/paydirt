@@ -34,7 +34,7 @@ export const hasKey = () => Boolean(apiKey());
 
 async function call(endpoint, body, { quoteUsd, timeoutMs }) {
   const key = apiKey();
-  if (!key) throw httpError(400, 'No Mireye key found. Run mireye-mcp connect, or set MIREYE_API_KEY in .env.');
+  if (!key) throw httpError(400, 'Paid parcel data isn\'t set up on this server (MIREYE_API_KEY).');
   const spent = await totalSpend();
   if (spent + quoteUsd > MAX_SPEND) {
     throw httpError(402, `Spend cap reached: $${spent.toFixed(2)} of $${MAX_SPEND.toFixed(2)} used. Raise MAX_SPEND_USD in .env to continue.`);
@@ -56,7 +56,7 @@ async function call(endpoint, body, { quoteUsd, timeoutMs }) {
     json = await res.json().catch(() => ({}));
   } catch (err) {
     await run('UPDATE api_calls SET error = ? WHERE id = ?', [String(err.message), callId]);
-    throw httpError(504, `Mireye request failed: ${err.message}`);
+    throw httpError(504, `Parcel data request failed: ${err.message}`);
   }
 
   const charged = Number(json?.billing?.charged_usd ?? 0);
@@ -66,7 +66,7 @@ async function call(endpoint, body, { quoteUsd, timeoutMs }) {
   if (!res.ok) {
     const code = json?.error?.code ?? json?.code ?? res.status;
     const msg = json?.error?.message ?? json?.message ?? JSON.stringify(json).slice(0, 300);
-    throw httpError(res.status, `Mireye ${code}: ${msg}`);
+    throw httpError(res.status, `Parcel data error ${code}: ${msg}`);
   }
   return { json, callId, charged };
 }

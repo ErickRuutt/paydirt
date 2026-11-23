@@ -135,13 +135,13 @@ export async function reviewParcel(project, pin, { status, notes }, user) {
 // Saved properties across an organization's projects (the home page), newest first.
 export async function orgSaved(orgUid, limit = 200) {
   return all(`SELECT pp.pp_uid, pp.property_uid, pp.status, pp.notes, pp.saved_at, pp.updated_at, pp.project_id, p.name AS project_name,
-      c.pin, c.address, c.city, c.postal_city, c.acres, c.zoning, c.sports_verdict, c.tags
+      c.pin, c.address, c.address_near, c.county_fips, c.city, c.postal_city, c.acres, c.zoning, c.sports_verdict, c.tags
     FROM project_properties pp JOIN projects p ON p.id = pp.project_id JOIN candidates c ON c.property_uid = pp.property_uid
     WHERE pp.org_uid = ? AND pp.saved AND NOT p.archived ORDER BY pp.saved_at DESC NULLS LAST LIMIT ${Number(limit)}`, [orgUid]);
 }
 
 // ---------- Candidates scored for a project ----------
-const LIST_COLS = `c.pin, c.property_uid, c.address, c.city, c.postal_city, c.acres, c.zoning, c.sports_verdict, c.present_use,
+const LIST_COLS = `c.pin, c.property_uid, c.address, c.address_near, c.county_fips, c.city, c.postal_city, c.acres, c.zoning, c.sports_verdict, c.present_use,
   c.years_held, c.signals, c.hh200k_10mi, c.share200k_10mi, c.land_value, c.lat, c.lng, c.tags, c.businesses, c.owner_type,
   c.out_of_state, c.absentee`;
 
@@ -180,8 +180,16 @@ export async function projectCandidates(project, filters = {}) {
   const allParams = [...k.scoreParams, ...params];
   const rows = await all(`SELECT * FROM (${sql}) t WHERE score >= ${minScore} ORDER BY score DESC, acres DESC LIMIT ${limit}`, allParams);
   const total = (await one(`SELECT count(*)::int AS n FROM (${sql}) t WHERE score >= ${minScore}`, allParams)).n;
+  // Places the project names that Paydirt holds no parcels for (e.g. a town outside the loaded counties):
+  // the map says so and offers to request them, instead of showing an unexplained empty list.
+  const places = searching ? [] : (project.spec.requirements.find((r) => r.field === 'area')?.value ?? []);
+  const uncovered = [];
+  for (const a of places) {
+    const hit = await one("SELECT 1 FROM candidates WHERE COALESCE(city, '') ILIKE ? OR COALESCE(postal_city, '') ILIKE ? LIMIT 1", [`%${a}%`, `%${a}%`]);
+    if (!hit) uncovered.push(a);
+  }
   return {
-    type: 'FeatureCollection', total,
+    type: 'FeatureCollection', total, uncovered,
     project: { id: project.id, name: project.name, version: project.spec_version },
     subscores: k.subscores,
     features: rows.filter((r) => r.lat != null).map((row) => {

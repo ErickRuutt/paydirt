@@ -12,7 +12,14 @@ window.pd = (() => {
   const titleCase = (s) => String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
   const where = (p) => (p.city ? titleCase(p.city) : `Unincorporated${p.postal_city ? ' · ' + titleCase(p.postal_city) : ''}`);
   const fmtPin = (pin) => `${String(pin).slice(0, 6)}-${String(pin).slice(6)}`;
-  const siteTitle = (p) => p.address || `Parcel ${fmtPin(p.pin)}`;
+  const siteTitle = (p) => p.address || (p.address_near ? `Near ${p.address_near}` : `Parcel ${fmtPin(p.pin)}`);
+  // A Google search pre-filled with the address (or the parcel number and county when there is none).
+  const COUNTY_TEXT = { 53033: 'King County WA', 53009: 'Clallam County WA' };
+  const webSearchUrl = (p) => {
+    const town = (p.city || p.postal_city || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+    const q = p.address ? `"${p.address}" ${town} WA` : `"${p.pin}" OR "${fmtPin(p.pin)}" ${COUNTY_TEXT[p.county_fips] ?? ''} parcel${p.address_near ? ` ${p.address_near}` : ''}`;
+    return `https://www.google.com/search?${new URLSearchParams({ q: q.replace(/\s+/g, ' ').trim() })}`;
+  };
   const ac = (x) => (x == null ? '—' : `${Number(x).toFixed(1)} ac`);
   // Short dates: "Nov 21" this year, "Nov 21, 2025" otherwise.
   const date = (d) => { if (!d) return '—'; const x = new Date(d); return x.toLocaleDateString(undefined, x.getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }); };
@@ -28,5 +35,5 @@ window.pd = (() => {
   }
   const STATUSES = ['new', 'shortlist', 'contacted', 'rejected'];
   const STATUS_TEXT = { new: 'Saved', shortlist: 'Shortlist', contacted: 'Contacted', rejected: 'Passed' }; // stored as 'rejected'
-  return { $, esc, api, where, siteTitle, ac, date, labels, STATUSES, STATUS_TEXT };
+  return { $, esc, api, where, siteTitle, webSearchUrl, ac, date, labels, STATUSES, STATUS_TEXT };
 })();

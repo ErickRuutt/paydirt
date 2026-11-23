@@ -10,7 +10,14 @@
   const VERDICT_PILL = { permitted: 'pass', conditional: 'review', prohibited: 'fail', unknown: 'unknown' };
   const { chip: scoreChip, mapExpr: scoreMapExpr } = window.paydirtScore; // one ramp: chips, dots, legend, bars
   const fmtPin = (pin) => `${String(pin).slice(0, 6)}-${String(pin).slice(6)}`;
-  const siteTitle = (p) => p.address || `Parcel ${fmtPin(p.pin)}`;
+  const siteTitle = (p) => p.address || (p.address_near ? `Near ${p.address_near}` : `Parcel ${fmtPin(p.pin)}`);
+  // A Google search pre-filled with the address (or the parcel number and county when there is none).
+  const COUNTY_TEXT = { 53033: 'King County WA', 53009: 'Clallam County WA' };
+  const webSearchUrl = (p) => {
+    const town = (p.city || p.postal_city || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+    const q = p.address ? `"${p.address}" ${town} WA` : `"${p.pin}" OR "${fmtPin(p.pin)}" ${COUNTY_TEXT[p.county_fips] ?? ''} parcel${p.address_near ? ` ${p.address_near}` : ''}`;
+    return `https://www.google.com/search?${new URLSearchParams({ q: q.replace(/\s+/g, ' ').trim() })}`;
+  };
   // The facts a scanner needs, as at most three short labels: zoning, what's on the site, the owner.
   const SITE_PILL = [['closing-tenant', 'review', 'Closing tenant'], ['anchor-tenant', 'fail', 'Anchor tenant'], ['operating-business', 'fail', 'Business on site'],
     ['possible-empty-building', 'review', 'Empty building?'], ['vacant-land', 'pass', 'Vacant']];
@@ -88,12 +95,63 @@
     cand = r;
     map.getSource('cand')?.setData(cand);
     renderCandList();
+    // Results somewhere else (another county, e.g. after unlocking it): move the map to them.
+    const pts = cand.features.map((f) => f.geometry.coordinates);
+    if (pts.length && !pts.some((p) => map.getBounds().contains(p))) {
+      const b = new maplibregl.LngLatBounds(); pts.forEach((p) => b.extend(p));
+      map.fitBounds(b, { padding: 60, maxZoom: 13, duration: 600 });
+    }
   }
   let t = null;
   if ($('lyPassed')) $('lyPassed').onchange = () => loadCandidates().catch(showErr);
   $('cArea').oninput = () => { clearTimeout(t); t = setTimeout(() => loadCandidates().catch(showErr), 300); };
   $('candForm').onsubmit = (e) => { e.preventDefault(); clearTimeout(t); loadCandidates().catch(showErr); };
   const showErr = (e) => { $('cCount').textContent = ''; $('cList').innerHTML = `<li class="msg err">${esc(e.message)}</li>`; };
+
+  // ---------- Unlocking a place the project names but Paydirt doesn't cover ----------
+  const SIZES = [1, 5, 10, 20, 40];
+  // Default size: the project's Must minimum, else its Nice minimum, rounded down to a size we sell.
+  function unlockSize() {
+    const must = project.spec.requirements.find((r) => r.field === 'acres')?.value?.[0];
+    const nice = project.spec.preferences.find((p) => p.field === 'acres')?.params?.min;
+    const want = Number(must ?? nice ?? 5);
+    return [...SIZES].reverse().find((x) => x <= want) ?? 1;
+  }
+  async function paintUnlock(place, size) {
+    const li = [...$('cList').querySelectorAll('li.uncovered')].find((x) => x.dataset.place === place);
+    if (!li) return;
+    let q;
+    try { q = await api(`/api/areas/quote?${new URLSearchParams({ place, minAcres: size })}`); }
+    catch (e) { li.innerHTML = `<b>${esc(titleCase(place))} isn’t covered yet.</b><span>${esc(e.message)}</span><span class="btnRow"><button type="button" data-request-area="${esc(place)}">Request ${esc(titleCase(place))}</button><a href="areas.html">See all areas</a></span>`; return; }
+    const county = `${q.county}, ${q.state}`;
+    if (!q.supported) {
+      li.innerHTML = `<b>${esc(q.place)} is in ${esc(county)}, which isn’t covered yet.</b><span>${esc(q.why)}</span>
+        <span class="btnRow"><button type="button" data-request-area="${esc(`${q.place} (${county})`)}">Request ${esc(q.county)}</button><a href="areas.html">See all areas</a></span>`;
+      return;
+    }
+    if (q.unlocked && q.loaded) { li.innerHTML = `<b>${esc(county)} is unlocked.</b><span>No parcels named “${esc(titleCase(place))}” match. Check the spelling in the Where chip.</span>`; return; }
+    const enough = q.balance >= q.credits;
+    li.innerHTML = `<b>${esc(q.place)} is in ${esc(county)}.</b>
+      <span>Unlocking the county’s <strong>${q.parcels.toLocaleString()}</strong> parcels of
+        <select data-unlock-size aria-label="Parcel size">${q.sizes.map((x) => `<option value="${x}" ${x === q.minAcres ? 'selected' : ''}>${x}+ acres</option>`).join('')}</select>
+        costs <strong>${q.credits.toLocaleString()} credits</strong>. You have ${q.balance.toLocaleString()}.</span>
+      <span class="btnRow">${enough ? `<button type="button" data-unlock="${esc(place)}" data-size="${q.minAcres}">Unlock for ${q.credits.toLocaleString()} credits</button>`
+        : `<button type="button" disabled>Not enough credits</button>`}<a href="areas.html">See all areas</a></span>
+      ${enough ? '' : '<span class="small">Ask us for credits with the Feedback button; card payments are coming.</span>'}`;
+  }
+  $('cList').addEventListener('change', (e) => {
+    const sel = e.target.closest('[data-unlock-size]'); if (!sel) return;
+    const li = sel.closest('li.uncovered'); paintUnlock(li.dataset.place, Number(sel.value));
+  });
+  async function unlock(btn) {
+    const li = btn.closest('li.uncovered');
+    btn.disabled = true; btn.textContent = 'Unlocking… loading parcels (about a minute)';
+    try {
+      const r = await api('/api/areas/unlock', { method: 'POST', body: { place: btn.dataset.unlock, minAcres: Number(btn.dataset.size) } });
+      li.innerHTML = `<b>${esc(r.county)} unlocked.</b><span>${(r.loaded ?? 0).toLocaleString()} parcels loaded. You have ${(r.balance ?? 0).toLocaleString()} credits left.</span>`;
+      await loadCandidates();
+    } catch (err) { btn.disabled = false; btn.textContent = 'Try again'; li.insertAdjacentHTML('beforeend', `<span class="msg err">${esc(err.message)}</span>`); }
+  }
 
   function renderCandList() {
     const shown = cand.features.slice(0, 150);
@@ -110,10 +168,26 @@
           ${p.hiddenFields?.length ? `<span class="hiddenWhy" title="${esc(p.hiddenBecause.join('; '))}">Hidden: ${esc(Criteria.hiddenNames(p.hiddenFields, catalog).join(', '))}</span>` : ''}
         </div>
         <button type="button" class="rowStar" data-star="${esc(p.pin)}" aria-pressed="${p.saved ? 'true' : 'false'}" title="${p.saved ? 'Saved to this project' : 'Save to this project'}" aria-label="${p.saved ? 'Unsave' : 'Save'} ${esc(siteTitle(p))}">${p.saved ? '★' : '☆'}</button>
-      </li>`).join('') || `<li class="muted">${searching ? 'Nothing found for that search.' : 'No sites match this project.'}</li>`;
+      </li>`).join('') || `<li class="muted">${searching ? 'Nothing found for that search.' : cand.uncovered?.length ? 'No sites: see above.' : 'No sites match this project.'}</li>`;
+    if (cand.uncovered?.length) {
+      $('cList').insertAdjacentHTML('afterbegin', cand.uncovered.map((a) => `<li class="uncovered" data-place="${esc(a)}"><b>${esc(titleCase(a))} isn’t covered yet.</b><span class="muted">Checking what it takes to unlock…</span></li>`).join(''));
+      for (const a of cand.uncovered) paintUnlock(a, unlockSize());
+    }
     window.paydirtTaper.apply($('cList'));
   }
-  $('cList').onclick = (e) => {
+  $('cList').onclick = async (e) => {
+    const un = e.target.closest('[data-unlock]');
+    if (un) { unlock(un); return; }
+    const ask = e.target.closest('[data-request-area]');
+    if (ask) {
+      ask.disabled = true; ask.textContent = 'Requesting…';
+      const useText = (project.spec.pending ?? []).find((x) => x.key === 'other_use_zoning')?.value ?? project.name;
+      try {
+        await api('/api/areas/requests', { method: 'POST', body: { kind: 'city', area: titleCase(ask.dataset.requestArea), useText, projectId: project.id, notes: `From project "${project.name}".` } });
+        ask.textContent = `Requested ${titleCase(ask.dataset.requestArea)} ✓`;
+      } catch (err) { ask.disabled = false; ask.textContent = err.message; }
+      return;
+    }
     const star = e.target.closest('[data-star]');
     if (star) { e.stopPropagation(); toggleSave(star.dataset.star); return; }
     const li = e.target.closest('li[data-pin]'); if (li) selectCandidate(li.dataset.pin, true);
@@ -309,12 +383,38 @@
     api(`/api/candidates/${encodeURIComponent(pin)}/profile`).then((r) => renderProfile(r, pin)).catch((e) => { const el = $('ownOut'); if (el) el.textContent = e.message; });
   }
 
+  // Cited web findings for a parcel (shared with the fit statement); running new research costs credits.
+  const webList = (w) => w ? `<ul class="webFindings">${w.findings.map((f) => `<li><span class="lbl">${esc(f.category)}</span><div><p>${esc(f.text)}</p>${f.sources.length ? `<p class="srcs">${f.sources.map((x) => `<span class="src"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a></span>`).join('')}</p>` : ''}</div></li>`).join('')}</ul>
+      <p class="muted small">Researched ${new Date(w.createdAt).toLocaleDateString()}. Not verified by Paydirt.</p>` : '<span class="muted small">Not researched yet: listings, permits, land-use notices, news and businesses at this site, each with its source.</span>';
+  async function paintWeb(c) {
+    const pin = c.pin;
+    try {
+      const r = await api(`/api/candidates/${encodeURIComponent(pin)}/research`);
+      if (detailFor !== pin) return;
+      $('webOut').innerHTML = webList(r.latest);
+      $('cResearchBtn').textContent = `${r.latest ? 'Research again' : 'Research this parcel'} · ${r.credits} credit${r.credits === 1 ? '' : 's'}`;
+    } catch (e) { $('webOut').textContent = e.message; }
+    $('cResearchBtn').onclick = async () => {
+      const btn = $('cResearchBtn'); btn.disabled = true; btn.textContent = 'Searching the web… (up to a minute)';
+      try {
+        const r = await api(`/api/projects/${project.id}/research/${encodeURIComponent(pin)}`, { method: 'POST' });
+        if (detailFor !== pin) return;
+        $('webOut').innerHTML = webList({ findings: r.findings, createdAt: r.createdAt });
+        $('cResearchMsg').className = 'msg'; $('cResearchMsg').textContent = `${r.balance.toLocaleString()} credits left.`;
+        btn.textContent = 'Research again';
+      } catch (err) { $('cResearchMsg').className = 'msg err'; $('cResearchMsg').textContent = err.message; btn.textContent = 'Try again'; }
+      finally { btn.disabled = false; }
+    };
+  }
+
   function renderCandidate(c) {
     const landPerAc = c.land_value && c.acres ? c.land_value / c.acres : null;
     $('detailBody').innerHTML = `
-      <h3>${esc(c.address || 'No site address')}</h3>
+      <h3>${esc(c.address || (c.address_near ? `Near ${c.address_near}` : 'No site address'))}</h3>
       <p class="muted">PIN ${esc(c.pin)} · ${fmt.ac(c.acres)} · ${esc(where(c))} ${scoreChip(c.score)}</p>
       ${c.hiddenBecause.length ? `<p class="warn" data-taper="2">Not in this project's results: ${c.hiddenBecause.map(esc).join('; ')}</p>` : ''}
+      <section><h2>From the web <span class="lblish">Unverified</span></h2><div id="webOut" class="muted">Loading…</div>
+        <div class="btnRow"><button type="button" id="cResearchBtn">Research this parcel</button><a class="btn paper" href="${esc(webSearchUrl(c))}" target="_blank" rel="noopener">Search Google ↗</a></div><p id="cResearchMsg" class="msg"></p></section>
       <section><h2>Why it scores ${c.score}</h2>${Criteria.checklistHtml(project, c, catalog)}</section>
       <section><h2>On this site</h2>
         <div class="tagRow">${(c.tags ?? []).map((t) => `<span class="pill ${TAG_TONE[t] ?? ''}">${esc(TAG_TEXT[t] ?? t)}</span>`).join('') || '<span class="muted">No site tags.</span>'}</div>
@@ -324,7 +424,7 @@
       <section><h2>Zoning for a sports club <span class="pill ${VERDICT_PILL[c.sports_verdict]}">${esc(VERDICT_LABEL[c.sports_verdict])}</span></h2>
         <dl><dt>Zone</dt><dd>${esc(c.zoning || '—')}</dd></dl>
         <p style="margin:0;font-size:13px" data-taper="3">${esc(c.sports_note)}</p>
-        ${c.zoning_source ? `<p class="muted" style="font-size:12px;margin:0">Source: <a href="${esc(c.zoning_source)}" target="_blank" rel="noopener">${c.city ? esc(where(c)) + ' use table' : 'King County Code Title 21A (updated Sep 9, 2026)'}</a>, read Nov 2026. Confirm with the ${c.city ? 'city' : 'county'} before relying on it.</p>` : ''}</section>
+        ${c.zoning_source ? `<p class="muted" style="font-size:12px;margin:0">Source: <a href="${esc(c.zoning_source)}" target="_blank" rel="noopener">${c.city ? esc(where(c)) + ' use table' : c.county_fips === '53009' ? 'Clallam County Code' : 'King County Code Title 21A (updated Sep 9, 2026)'}</a>, read Nov 2026. Confirm with the ${c.city ? 'city' : 'county'} before relying on it.</p>` : ''}</section>
       <section><h2>Owner signals</h2>
         <div data-taper="2">${c.signals.map((s) => `<span class="chip">${esc(s)}</span>`).join('') || '<span class="muted">None found.</span>'}</div>
         <dl><dt>Tax bill mailed to</dt><dd>${esc(c.mail_city_state || '—')}</dd>
@@ -337,7 +437,7 @@
         <dt>Building value</dt><dd>${fmt.usd(c.impr_value)}</dd></dl>
         <p class="muted" style="font-size:12px;margin:0">County assessed values, not market prices.</p></section>
       <section><h2>Buildable check</h2>
-        <p class="muted" style="font-size:12px;margin:0">Slope, wetlands, flood zone and owner name from Mireye. $0.02.</p>
+        <p class="muted" style="font-size:12px;margin:0">Slope, wetlands, flood zone and owner name for this parcel. $0.02.</p>
         <div id="cEnrichOut"></div>
         <button id="cEnrichBtn" type="button">${c.enrichment ? 'Check again' : 'Check slope, wetlands & flood'} · $0.02</button><p id="cEnrichMsg" class="msg"></p></section>
       <section><h2>Review</h2>
@@ -349,6 +449,7 @@
     $('detailBarTitle').textContent = `${siteTitle(c)} · ${c.score}`;
     paintSaveButton(Boolean(c.saved));
     if (c.enrichment) showKeyFields(c.enrichment.fields, c.keyFields, c.enrichment.created_at);
+    paintWeb(c);
     $('cEnrichBtn').onclick = async () => {
       $('cEnrichBtn').disabled = true; $('cEnrichMsg').className = 'msg'; $('cEnrichMsg').textContent = 'Checking…';
       try {

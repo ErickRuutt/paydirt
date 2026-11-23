@@ -19,6 +19,7 @@ window.paydirtProperty = (() => {
         <div class="pmTitle"><span id="pmScore"></span><div><h2 id="pmName" class="pmH">&nbsp;</h2><p id="pmMeta" class="lblish"></p></div></div>
         <div class="pmBtns">
           <button type="button" id="pmSave" class="ghost" aria-pressed="true">★ Saved</button>
+          <a id="pmFit" class="btn" href="fit.html">Fit statement</a>
           <a id="pmFull" class="btn paper" href="map.html">Open in map</a>
           <button type="button" id="pmClose" class="ghost" title="Close (Esc)">Close ✕</button>
         </div>
@@ -64,6 +65,7 @@ window.paydirtProperty = (() => {
     dlg.querySelector('#pmScore').innerHTML = '';
     dlg.querySelector('#pmDetail').innerHTML = '<p class="muted">Loading…</p>';
     dlg.querySelector('#pmFull').href = `map.html?project=${projectId}&pin=${encodeURIComponent(pin)}`;
+    dlg.querySelector('#pmFit').href = `fit.html?project=${projectId}&pin=${encodeURIComponent(pin)}`;
     dlg.showModal();
     await ensureMap();
     map.resize();
