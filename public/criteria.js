@@ -96,18 +96,21 @@ window.paydirtCriteria = (() => {
     const pending = project.spec?.pending ?? [];
     const groups = { must: [], nice: [], unset: [] };
     for (const ch of chips) groups[describe(ch, catalog).group].push(ch);
+    // One button per filter, always in the same order, reading "Name  value ▾". Whether a filter hides sites or
+    // only ranks them is set inside it; the bar says only what is set.
+    const SHORT = { size: 'Size', where: 'Where', zoning: 'Zoning', site: 'On the site', sell: 'Owner', families: 'Families nearby', price: 'Land price', tagged: 'Tagged' };
     const chipBtn = (ch) => {
-      const t = describe(ch, catalog);
+      const t = describe(ch, catalog), name = SHORT[ch.key] ?? ch.label;
       const groupWord = t.group === 'must' ? 'Must have' : t.group === 'nice' ? 'Nice to have' : 'Not set';
-      return `<button type="button" class="cchip ${t.group}" data-chip="${esc(ch.key)}" aria-label="${esc(`${ch.label}. ${groupWord}: ${[t.text, t.sub, t.level].filter(Boolean).join(', ')}`)}">`
-        + `<span>${esc(t.text)}${t.level ? ` <span class="lvl">${esc(t.level)}</span>` : ''}</span>${t.sub ? `<small>${esc(t.sub)}</small>` : ''}</button>`;
+      const NICE_ONLY = { sell: 'signs of selling', families: '$200k+ households', zoning: 'permitted first', price: 'cheaper first' };
+      const value = t.group === 'unset' ? '' : t.group === 'nice' && NICE_ONLY[ch.key] ? NICE_ONLY[ch.key] : t.text.replace(/^Zoning: /, '').replace(/^In /, '');
+      return `<button type="button" class="cchip ${t.group}" data-chip="${esc(ch.key)}" aria-haspopup="dialog" aria-label="${esc(`${ch.label}. ${groupWord}: ${[t.text, t.sub, t.level].filter(Boolean).join(', ')}`)}">`
+        + `<span class="k">${esc(name)}</span>${value ? `<span class="v">${esc(value)}</span>` : ''}${t.group === 'nice' ? '<small>ranks only</small>' : ''}<span class="caret" aria-hidden="true">▾</span></button>`;
     };
     const present = new Set(chips.map((c) => c.key));
     const addable = catalog.criteria.chips.filter((c) => !c.standard && !present.has(c.key));
     let html = '';
-    if (groups.must.length) html += `<span class="critGrp">Must</span>${groups.must.map(chipBtn).join('')}`;
-    if (groups.nice.length) html += `<span class="critGrp">Nice</span>${groups.nice.map(chipBtn).join('')}`;
-    if (groups.unset.length) html += groups.unset.map(chipBtn).join('');
+    html += chips.map(chipBtn).join('');
     if (pending.length) {
       html += '<span class="critGrp">Not checked yet</span>' + pending.map((p, i) => {
         const label = catalog.criteria.pending[p.key]?.label ?? p.key;
@@ -116,7 +119,7 @@ window.paydirtCriteria = (() => {
     }
     const menuId = `${el.id || 'crit'}AddMenu`;
     if (addable.length) {
-      html += `<button type="button" class="cchip add" data-add aria-expanded="false" aria-controls="${esc(menuId)}">+ Add</button>`
+      html += `<button type="button" class="cchip add" data-add aria-expanded="false" aria-controls="${esc(menuId)}">More filters <span class="caret" aria-hidden="true">▾</span></button>`
         + `<span id="${esc(menuId)}" class="critAddMenu" hidden>${addable.map((c) => `<button type="button" class="cchip unset" data-add-key="${esc(c.key)}">${esc(c.label)}</button>`).join('')}</span>`;
     }
     el.innerHTML = html;

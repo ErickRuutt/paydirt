@@ -108,3 +108,13 @@ and in Vercel):
 3. `npm run setup:notion` creates the **Feedback log** table there and prints `NOTION_FEEDBACK_DB`.
 
 Without them, feedback is still saved in the database; `notion_error` records any failed copy.
+
+## Change log (required for every push)
+
+`public/changelog.json` is shown in the app at `changelog.html` ("What's new", under the Feedback button). Before any push to `main`:
+
+1. Add or update the top entry with `"status": "pending"`: for each change, `what` changed and `why` it makes Paydirt better, in words a buyer would follow.
+2. If a change can't be explained that way, leave it out of the push.
+3. Set the entry to `"live"` in the commit that ships it.
+
+`npm test` fails if an entry has no `what` or `why`.

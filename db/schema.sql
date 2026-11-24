@@ -421,3 +421,13 @@ CREATE TABLE IF NOT EXISTS datasets (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (county_fips, layer)
 );
+
+-- Added Nov 24, 2026: zone codes joined from public zoning maps, and use rules read from the code by Paydirt.
+-- zoning_basis: 'read' = read from the code by Paydirt and not yet checked by a person; 'confirmed' = a person checked it.
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS zone_name TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS zoning_basis TEXT;
+-- zoning_rules.jurisdiction for these rows is "<county_fips>:<CITY>" ("<county_fips>:" = unincorporated).
+ALTER TABLE zoning_rules ADD COLUMN IF NOT EXISTS zone_name TEXT;
+ALTER TABLE zoning_rules ADD COLUMN IF NOT EXISTS basis TEXT NOT NULL DEFAULT 'confirmed';
+ALTER TABLE zoning_rules ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
+ALTER TABLE zoning_rules ADD COLUMN IF NOT EXISTS read_by TEXT;

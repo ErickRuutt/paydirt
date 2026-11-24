@@ -3,6 +3,7 @@ import { newId } from './ids.js';
 import { httpError } from './mireye.js';
 import { countyOf, countParcels } from './counties.js';
 import { fillAddresses } from './addresses.js';
+import { fillZones } from './zoneLayers.js';
 import { closeRequestsFor } from './areas.js';
 import { ladder, recordDatasets } from './datasets.js';
 import { addArea } from './projectAreas.js';
@@ -123,6 +124,7 @@ export async function loadCounty(fips, minAcres) {
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
   // Addresses are a nice-to-have: a failure here never undoes the unlock.
   await fillAddresses(fips).catch((e) => console.error(`Addresses for ${fips}: ${e.message}`));
+  await fillZones(fips).catch((e) => console.error(`Zones for ${fips}: ${e.message}`));
   return rows.length;
 }
 

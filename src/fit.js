@@ -126,14 +126,14 @@ function zoningFindings(c, project, d) {
       unknown('entitlement', 'Entitlement path', 'Unknown until the zoning rules are read.', null),
     ];
   }
-  const v = c.sports_verdict ?? 'unknown';
+  const v = c.sports_verdict ?? 'unknown', read = c.zoning_basis === 'read';
   const src = c.zoning_source ? [{ label: `${place} zoning code`, url: c.zoning_source }] : !c.city && isKing(c) ? [{ label: 'King County Code Title 21A', url: KC_CODE_SOURCE }] : [];
   const zoning = {
-    key: 'zoning', label: 'Zoning', basis: v === 'unknown' ? 'unknown' : 'known',
+    key: 'zoning', label: 'Zoning', basis: v === 'unknown' ? 'unknown' : read ? 'likely' : 'known',
     verdict: { permitted: 'favorable', conditional: 'neutral', prohibited: 'unfavorable', unknown: 'unknown' }[v],
-    finding: `${zone}. ${c.sports_note ?? ''}`.trim(),
+    finding: `${zone}${c.zone_name ? ` (${c.zone_name})` : ''}. ${c.sports_note ?? ''}`.trim(),
     sources: src, dealBreaker: v === 'prohibited',
-    check: v === 'unknown' ? `Paydirt hasn't read ${place}'s rules for this zone. Request it on the Areas page, or call ${place} planning.` : 'Confirm with the planning department before relying on this; codes change.',
+    check: v === 'unknown' ? `Paydirt hasn't read ${place}'s rules for this zone. ${c.zoning && !isKing(c) ? "Read them from the site's Zoning section" : 'Request it on the Areas page'}, or call ${place} planning.` : read ? `Paydirt read this from ${place}'s code and no person has checked it yet. Open the source and confirm with planning before relying on it.` : 'Confirm with the planning department before relying on this; codes change.',
   };
   const path = {
     permitted: ['favorable', 'Allowed outright: a building permit, no hearing. Development conditions can still apply.'],

@@ -175,7 +175,9 @@ export async function projectCandidates(project, filters = {}) {
   const where = ['c.excluded IS NULL', ...(searching ? [] : k.where)];
   const params = searching ? [] : [...k.whereParams];
   const add = (sql, ...v) => { where.push(sql); params.push(...v); };
-  const scope = searching || filters.pins ? null : areaFilter(project.areas);
+  // everywhere: look past the project's areas at all loaded land (the criteria still apply).
+  const everywhere = filters.everywhere === 'true';
+  const scope = searching || filters.pins || everywhere ? null : areaFilter(project.areas);
   if (scope) add(scope.sql, ...scope.params);
   if (filters.minAcres) add('c.acres >= ?', Number(filters.minAcres));
   if (filters.maxAcres) add('c.acres <= ?', Number(filters.maxAcres));
@@ -206,7 +208,7 @@ export async function projectCandidates(project, filters = {}) {
   // Areas of the project that Paydirt holds no parcels for (e.g. a town in a county that isn't loaded): the map
   // says so and offers to unlock or request them, instead of showing an unexplained empty list.
   const uncovered = [];
-  for (const a of searching ? [] : project.areas ?? []) {
+  for (const a of searching || everywhere ? [] : project.areas ?? []) {
     const f = areaFilter([a]);
     if (f && !(await one(`SELECT 1 FROM candidates c WHERE ${f.sql} LIMIT 1`, f.params))) uncovered.push(areaLabel(a));
   }

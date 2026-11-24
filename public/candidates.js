@@ -21,8 +21,12 @@
   // The facts a scanner needs, as at most three short labels: zoning, what's on the site, the owner.
   const SITE_PILL = [['closing-tenant', 'review', 'Closing tenant'], ['anchor-tenant', 'fail', 'Anchor tenant'], ['operating-business', 'fail', 'Business on site'],
     ['possible-empty-building', 'review', 'Empty building?'], ['vacant-land', 'pass', 'Vacant']];
+  // Zoning verdicts exist for one use (a sports facility). Only a project whose criteria check that use sees them;
+  // every other project sees the zone and is told its own use hasn't been read.
+  const checksSports = () => [...(project?.spec.requirements ?? []), ...(project?.spec.preferences ?? [])].some((x) => x.field === 'zoning.sports_facility');
+  const useText = () => (project?.spec.pending ?? []).find((x) => x.key === 'other_use_zoning')?.value?.replace(/^zoning that allows /i, '') ?? 'your use';
   function rowFacts(p) {
-    const out = [`<span class="pill ${VERDICT_PILL[p.sports_verdict]}">${esc(VERDICT_SHORT[p.sports_verdict] ?? p.sports_verdict)}</span>`];
+    const out = checksSports() ? [`<span class="pill ${VERDICT_PILL[p.sports_verdict]}">${esc(VERDICT_SHORT[p.sports_verdict] ?? p.sports_verdict)}</span>`] : [];
     const site = SITE_PILL.find(([t]) => p.tags?.includes(t));
     if (site) out.push(`<span class="pill ${site[1]}">${site[2]}</span>`);
     const sig = p.signals.find((s) => /inherit/.test(s)) ? 'Inherited' : p.years_held >= 20 ? `Held ${Math.floor(p.years_held)}y` : p.signals.find((s) => /no market sale/.test(s)) ? 'No sale on record' : null;
@@ -37,6 +41,7 @@
   // Stored status values stay as they are; 'rejected' reads as Passed.
   const STATUS_TEXT = { new: 'Saved', shortlist: 'Shortlist', contacted: 'Contacted', rejected: 'Passed' };
   const VERDICT_SHORT = { permitted: 'Permitted', conditional: 'Conditional', prohibited: 'Not allowed', unknown: 'Zoning unknown' };
+  const titlePlace = (c) => (c.city ? titleCase(c.city) : c.countyName ?? 'The county');
   const where = (p) => p.city ? titleCase(p.city) : `Unincorporated${p.postal_city ? ' · ' + titleCase(p.postal_city) : ''}`;
   const titleCase = (s) => String(s ?? '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -84,8 +89,23 @@
   // The project is the filter; the bar only adds the search text. Passed sites stay off the map
   // unless "Show passed sites" is on under Layers.
   const hidePassed = () => !$('lyPassed')?.checked;
+  // "Search everywhere": look past the project's areas at all loaded land, like clearing the boundary on a map search.
+  // The areas stay on the project; this is a view setting, remembered per project in this browser.
+  const everyKey = () => `paydirt.everywhere.${project?.id}`;
+  const everywhere = () => { try { return Boolean(project?.areas?.length) && localStorage.getItem(everyKey()) === '1'; } catch { return false; } };
+  function paintScope() {
+    const has = Boolean(project?.areas?.length), on = everywhere();
+    $('county').textContent = has && !on ? [...new Set(project.areas.map((a) => a.county_name ?? a.place))].join(' · ') : 'Everywhere you’ve unlocked';
+    $('everywhereBtn').hidden = !has;
+    $('everywhereBtn').textContent = on ? 'Back to this project’s areas' : 'Search everywhere unlocked';
+  }
+  $('everywhereBtn').onclick = () => {
+    try { if (everywhere()) localStorage.removeItem(everyKey()); else localStorage.setItem(everyKey(), '1'); } catch { /* storage blocked */ }
+    paintScope(); loadCandidates();
+  };
   async function loadCandidates() {
     const q = new URLSearchParams({ hidePassed: String(hidePassed()) });
+    if (everywhere()) q.set('everywhere', 'true');
     const area = $('cArea').value.trim(); if (area) q.set('area', area);
     const key = q.toString() + '|' + project.id + '|' + project.spec_version;
     pending = key;
@@ -212,7 +232,7 @@
   function renderBar() {
     Criteria.render($('critChips'), project, catalog, { onChip: openEditor, onAdd: openEditor });
     // The panel's sub-line names where this project searches.
-    $('county').textContent = project.areas?.length ? [...new Set(project.areas.map((a) => a.county_name ?? a.place))].join(' · ') : 'Everywhere you’ve unlocked';
+    paintScope();
     $('critVer').textContent = `v${project.spec_version}`;
     const h = project.history ?? [];
     const mine = h[0] && me && h[0].changed_by === me.user_uid;
@@ -384,10 +404,14 @@
         <dl><dt>Owner type</dt><dd>${esc(OWNER_TEXT[c.owner_type] ?? 'Unknown')}</dd><dt>Building value</dt><dd>${c.impr_value != null && c.acres ? `${fmt.usd(c.impr_value / c.acres)} per acre` : '—'}</dd></dl>
         ${c.businesses.length ? `<div class="biz" data-taper="7"><span class="lbl">Businesses here (${c.businesses.length}, from OpenStreetMap)</span>${c.businesses.map((b) => `<div class="bizRow"><span><b>${esc(b.label)}</b> <span class="muted">${esc(b.kind ?? '')}</span>${b.note ? `<br><span class="muted" style="font-size:12px">${esc(b.note)}</span>` : ''}</span><span class="pill ${b.status === 'closing' ? 'review' : b.status === 'anchor' ? 'fail' : ''}">${b.status === 'anchor' ? 'Anchor' : b.status === 'closing' ? 'Closing' : 'Open'}</span></div>`).join('')}</div>` : '<p class="muted" style="margin:0;font-size:13px">No businesses mapped on this parcel.</p>'}
       </section>
-      <section><h2>Zoning for a sports club <span class="pill ${VERDICT_PILL[c.sports_verdict]}">${esc(VERDICT_LABEL[c.sports_verdict])}</span></h2>
-        <dl><dt>Zone</dt><dd>${esc(c.zoning || '—')}</dd></dl>
+      ${checksSports() ? `<section><h2>Zoning for a sports facility <span class="pill ${VERDICT_PILL[c.sports_verdict]}">${esc(VERDICT_LABEL[c.sports_verdict])}</span></h2>
+        <dl><dt>Zone</dt><dd>${esc(c.zoning || '—')}${c.zone_name ? ` · ${esc(c.zone_name)}` : ''}</dd></dl>
         <p style="margin:0;font-size:13px" data-taper="3">${esc(c.sports_note)}</p>
-        ${c.zoning_source ? `<p class="muted" style="font-size:12px;margin:0">Source: <a href="${esc(c.zoning_source)}" target="_blank" rel="noopener">${c.city ? esc(where(c)) + ' use table' : c.county_fips === '53009' ? 'Clallam County Code' : 'King County Code Title 21A (updated Sep 9, 2026)'}</a>, read Nov 2026. Confirm with the ${c.city ? 'city' : 'county'} before relying on it.</p>` : ''}</section>
+        ${c.zoning_source ? `<p class="muted" style="font-size:12px;margin:0">Source: <a href="${esc(c.zoning_source)}" target="_blank" rel="noopener">${c.zoning_basis === 'read' ? esc(titlePlace(c)) + ' zoning code' : c.city ? esc(where(c)) + ' use table' : c.county_fips === '53009' ? 'Clallam County Code' : 'King County Code Title 21A (updated Sep 9, 2026)'}</a>${c.zoning_basis === 'read' ? '. Read from the code by Paydirt; no person has checked it yet.' : ', read Nov 2026.'} Confirm with the ${c.city ? 'city' : 'county'} before relying on it.</p>` : ''}
+        ${c.zoningRead ? `<div class="btnRow"><button type="button" id="cZoneReadBtn">Read ${esc(titlePlace(c))}'s zoning rules · ${c.zoningRead.credits} credits</button></div>
+          <p class="muted" style="font-size:12px;margin:0">Paydirt reads the code for all ${c.zoningRead.zones} zones here, once. Every site in ${esc(titlePlace(c))} gets its answer, with the code section.</p><p id="cZoneReadMsg" class="msg"></p>` : ''}</section>` : `<section><h2>Zoning</h2>
+        <dl><dt>Zone</dt><dd>${esc(c.zoning || '—')}${c.zone_name ? ` · ${esc(c.zone_name)}` : ''}</dd></dl>
+        <p style="margin:0;font-size:13px">${c.zoning ? `Paydirt hasn't read ${esc(titlePlace(c))}'s rules for ${esc(useText())} yet.` : 'No zone on record for this site yet.'}</p></section>`}
       <section><h2>Owner signals</h2>
         <div data-taper="2">${c.signals.map((s) => `<span class="chip">${esc(s)}</span>`).join('') || '<span class="muted">None found.</span>'}</div>
         <dl><dt>Tax bill mailed to</dt><dd>${esc(c.mail_city_state || '—')}</dd>
@@ -413,6 +437,15 @@
     paintSaveButton(Boolean(c.saved));
     if (c.enrichment) showKeyFields(c.enrichment.fields, c.keyFields, c.enrichment.created_at);
     paintWeb(c);
+    if ($('cZoneReadBtn')) $('cZoneReadBtn').onclick = async () => {
+      const btn = $('cZoneReadBtn'), msg = $('cZoneReadMsg'); btn.disabled = true; btn.textContent = 'Reading the code… (a few minutes)';
+      try {
+        const r = await api(`/api/projects/${project.id}/zoning/${encodeURIComponent(c.pin)}`, { method: 'POST' });
+        await loadCandidates();
+        if (detailFor === c.pin) await selectCandidate(c.pin, false);
+        if ($('cZoneReadMsg')) $('cZoneReadMsg').textContent = r.already ? 'Already read; nothing charged.' : `${r.zones} zones read, ${r.applied} sites updated. ${r.credits} credits used; ${r.balance.toLocaleString()} left.`;
+      } catch (err) { msg.className = 'msg err'; msg.textContent = err.message; btn.disabled = false; btn.textContent = 'Try again'; }
+    };
     $('cEnrichBtn').onclick = async () => {
       $('cEnrichBtn').disabled = true; $('cEnrichMsg').className = 'msg'; $('cEnrichMsg').textContent = 'Checking…';
       try {

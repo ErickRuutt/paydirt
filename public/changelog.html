@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changes · Paydirt</title>
+<link rel="icon" href="brand/simple.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script>try { const t = localStorage.getItem('paydirt.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch { /* storage blocked */ }</script>
+</head>
+<body class="page">
+<nav class="sidenav" aria-label="Main">
+  <a href="index.html" class="wordmark" title="Your projects">Pay<span>dirt</span></a>
+  <div class="navLinks"><a href="index.html">Projects</a><a href="map.html" id="navMap">Map</a><a href="project.html" id="navSaved">Saved</a><a href="areas.html">Areas</a></div>
+  <div class="navFoot">
+    <button type="button" id="feedbackBtn" class="feedbackBtn">Feedback</button>
+    <a href="changelog.html" class="changeLink" aria-current="page">What’s new</a>
+    <span id="orgName" class="lblish"></span>
+    <div class="themeSwitch" role="group" aria-label="Theme"><button type="button" data-theme-set="system" aria-pressed="true">Auto</button><button type="button" data-theme-set="light" aria-pressed="false">Light</button><button type="button" data-theme-set="dark" aria-pressed="false">Dark</button></div>
+    <div id="userButton"></div>
+  </div>
+</nav>
+
+<main class="page-in">
+  <section class="fitHead">
+    <div>
+      <p class="lbl">Changes</p>
+      <h1 class="title">what changed, and why</h1>
+      <p class="lede">Every update to Paydirt is listed here in plain words: what changed and why it makes the tool better. An update that can't be explained this way doesn't go out.</p>
+    </div>
+  </section>
+  <div id="changes"><p class="muted">Loading…</p></div>
+</main>
+
+<div id="signin" hidden><div class="signinCard"><h1>Pay<span style="color:var(--accent)">dirt</span></h1><p class="sub">Sign in to continue. Access is by invitation.</p><div id="signinBox"></div></div></div>
+<script src="auth.js"></script>
+<script src="theme.js"></script>
+<script src="feedback.js"></script>
+<script src="pages.js"></script>
+<script src="changelog.js"></script>
+</body>
+</html>

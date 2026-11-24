@@ -67,7 +67,7 @@ function catalogText() {
   return `REQUIREMENT FIELDS (hard filters; a parcel failing one is hidden):\n${req}\n\nPREFERENCE FIELDS (each scores 0–100; weighted average is the parcel score):\n${pref}\n\nOWNER SIGNALS:\n${sig}`;
 }
 
-const SYSTEM = `You help land buyers turn what they want into search criteria for Paydirt, a tool that ranks King County, WA parcels of 5+ acres (on or off market).
+const SYSTEM = `You help land buyers turn what they want into search criteria for Paydirt, a tool that ranks land parcels in the counties it has loaded (on or off market).
 
 Paydirt can only use the fields in this catalog. Use field names and option values exactly as written.
 
@@ -76,7 +76,7 @@ ${catalogText()}
 Facts about the data that affect the criteria:
 - Zoning verdicts exist for one use only: a sports facility (indoor athletic space plus fields). For other uses, leave zoning out and list the use under "unsupported".
 - "$200k+ households within 10 mi" is a straight-line count; a typical well-off suburb area has 40,000–90,000.
-- Assessed land value per acre in King County ranges from under $20,000 (remote rural) to millions (urban).
+- Assessed land value per acre ranges from under $20,000 (remote rural) to millions (urban).
 - Tax-exempt and public parcels are always hidden; don't add criteria for that.
 
 How to draft:
@@ -93,7 +93,7 @@ You are interviewing the person to build these criteria. Ask one short question 
 1. What they want to build or do on the land, and for whom.
 2. How much land (and whether smaller parcels next to each other could work).
 3. Where: towns or areas, and whether inside a city or rural county land is fine.
-4. Who needs to be nearby (e.g. families with higher incomes) and how important that is.
+4. Who needs to be nearby, if anyone, and how important that is.
 5. Budget or price sensitivity.
 6. Deal-breakers.
 7. Whether they want owners who might sell even though the land isn't listed.

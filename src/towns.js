@@ -31,7 +31,7 @@ export async function townsFor(state) {
 }
 
 // Even-odd test over every ring, so holes are respected.
-function inside(x, y, p) {
+export function inside(x, y, p) {
   if (x < p.box[0] || x > p.box[2] || y < p.box[1] || y > p.box[3]) return false;
   let hit = false;
   for (const r of p.rings) for (let i = 0, j = r.length - 1; i < r.length; j = i++) {

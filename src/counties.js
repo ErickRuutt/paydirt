@@ -37,8 +37,9 @@ export const COUNTIES = {
     where: (min) => `ACRES_GIS >= ${Number(min)} AND (VALUE_LAND > 0 OR VALUE_IMPR > 0)`,
     sources: { parcels: { label: 'Clallam County GIS parcels', url: CLALLAM_LAYER }, assessor: { label: 'Clallam County Assessor', url: 'https://www.clallamcountywa.gov/279/Assessor' } } },
   53053: { fips: '53053', name: 'Pierce County', state: 'WA', layer: PIERCE_LAYER, load: loadPierce, townsFromCensus: true,
-    includes: 'site address, assessed values, land use, tax exemptions and the owner\'s mailing city (no owner names or zoning yet)',
-    layers: { parcels: YES, owners: { state: 'partial', note: 'Mailing city only, no owner names.' }, sales: NO, zoning: NO, environment: PER_SITE },
+    includes: 'site address, assessed values, land use, tax exemptions and the owner\'s mailing city (no owner names yet)',
+    layers: { parcels: YES, owners: { state: 'partial', note: 'Mailing city only, no owner names.' }, sales: NO,
+      zoning: { state: 'partial', note: 'Zone codes for unincorporated Pierce County, Gig Harbor and Tacoma. The rules for your use are read from the code when you ask.' }, environment: PER_SITE },
     where: (min) => `Land_Acres >= ${Number(min)} AND (Land_Value > 0 OR Improvement_Value > 0)`,
     sources: { parcels: { label: 'Pierce County tax parcels', url: PIERCE_LAYER }, assessor: { label: 'Pierce County Assessor-Treasurer', url: 'https://atip.piercecountywa.gov/' } } },
 };
@@ -95,7 +96,7 @@ export async function countParcels(fips, minAcres) {
 }
 
 // Page through a layer's matches (2,000 at most per page on these services).
-async function fetchAll(layer, params) {
+export async function fetchAll(layer, params) {
   const feats = [];
   for (let offset = 0; ; offset += 2000) {
     const j = await arcgis(layer, { ...params, orderByFields: 'OBJECTID', resultOffset: String(offset), resultRecordCount: '2000',

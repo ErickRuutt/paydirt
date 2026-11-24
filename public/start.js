@@ -49,6 +49,7 @@
         <p class="lbl">Here's what Paydirt will look for</p>
         <div id="startChips" class="critChips" role="group" aria-label="What this project will look for"></div>
         <p class="muted small">Click any of these to change it before you create the project.</p>
+        <div id="startAdvice" class="startAdvice" aria-live="polite"></div>
         ${draft.unsupported.length ? `<p class="muted small">Not something Paydirt can check yet: ${draft.unsupported.map(esc).join('; ')}.</p>` : ''}
         ${draft.questions.length ? `<p class="muted small">Worth deciding later: ${draft.questions.map(esc).join(' ')}</p>` : ''}
         ${draft.errors.length ? '<p class="warn">Part of your description couldn\'t be turned into a chip. Check the chips above, or add more detail and draft again.</p>' : ''}
@@ -60,6 +61,28 @@
       </div>`;
     window.paydirtCriteria.draft($('startChips'), draft, catalog);
     $('startCreate').onclick = create;
+    advise();
+    // Re-count after a chip is changed (the chip row is redrawn on every change).
+    new MutationObserver(advise).observe($('startChips'), { childList: true });
+  }
+
+  // What this draft finds today, and what to change to find more: counted from loaded data, shown before creating.
+  let adviceFor = null;
+  async function advise() {
+    const el = $('startAdvice'); if (!el) return;
+    const key = JSON.stringify(draft.spec); if (key === adviceFor) return; adviceFor = key;
+    el.innerHTML = '<p class="muted small">Counting matching sites…</p>';
+    try {
+      const a = await api('/api/drafts/advice', { method: 'POST', body: { spec: draft.spec } });
+      if (adviceFor !== key || !el.isConnected) return;
+      const out = [`<p><b>${a.count.toLocaleString()} ${a.count === 1 ? 'site matches' : 'sites match'} today.</b>${a.few && !a.loosen ? (a.count ? ' That is a short list.' : ' No single filter is the cause, so more than one needs widening.') : ''}</p>`];
+      if (a.loosen) out.push(`<p>“${esc(a.loosen.label)}” is the filter cutting the most: without it, ${a.loosen.count.toLocaleString()} sites would match. Click it above to widen it.</p>`);
+      const missing = a.places.filter((p) => !p.loaded);
+      if (missing.length) out.push(`<p>${missing.map((p) => esc(p.name)).join(', ')} ${missing.length === 1 ? 'is' : 'are'} not loaded yet. After you create the project, use “Where to search” on the map to see what unlocking ${missing.length === 1 ? 'it' : 'them'} costs.</p>`);
+      const have = a.places.filter((p) => p.loaded);
+      if (have.length) out.push(`<p class="muted small">Loaded: ${have.map((p) => `${esc(p.name)} (${p.sites.toLocaleString()} sites of any kind)`).join(', ')}.</p>`);
+      el.innerHTML = out.join('');
+    } catch (err) { if (adviceFor === key) el.innerHTML = `<p class="muted small">Couldn't count sites: ${esc(err.message)}</p>`; }
   }
 
   async function create() {

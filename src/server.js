@@ -20,6 +20,9 @@ import { logFeedback } from './feedback.js';
 import { fitStatement } from './fit.js';
 import { nearRoad } from './addresses.js';
 import { researchParcel, latestResearch, RESEARCH_CREDITS } from './research.js';
+import { readZoning, readingStatus } from './zoningReader.js';
+import { draftAdvice } from './advice.js';
+import { countyOf } from './counties.js';
 import { coverage, listRequests, requestArea, AREA_KINDS, AREA_STATUSES } from './areas.js';
 import { quote, unlockCounty, listUnlocks, creditBalance, resolvePlace, SIZES } from './unlock.js';
 import { listAreas, addArea, removeArea, areaLabel } from './projectAreas.js';
@@ -117,6 +120,8 @@ app.post('/api/drafts/from-text', wrap(async (req, res) => {
   const current = req.body?.projectId ? (await projectOr404(req.body.projectId, req)).spec : null;
   res.json(await draftFromText({ text: req.body?.text, current }));
 }));
+// What a draft would find today, before the project exists (counts only; nothing is saved).
+app.post('/api/drafts/advice', wrap(async (req, res) => res.json(await draftAdvice(req.body?.spec ?? { requirements: [], preferences: [] }))));
 app.post('/api/drafts/interview', wrap(async (req, res) => res.json(await interviewTurn({ messages: req.body?.messages }))));
 
 app.get('/api/projects/:id/candidates', wrap(async (req, res) => res.json(await projectCandidates(await projectOr404(req.params.id, req), req.query))));
@@ -126,7 +131,10 @@ app.get('/api/projects/:id/candidates/:pin', wrap(async (req, res) => {
   if (!c) throw httpError(404, 'Parcel not found.');
   if (!c.address) c.address_near = await nearRoad(c.pin); // no address: name the closest road (cached)
   const enr = await one('SELECT raw_json, created_at FROM enrichments WHERE parcelnumb = ? ORDER BY id DESC LIMIT 1', [c.pin]);
-  res.json({ ...c, keyFields: KEY_FIELDS, checkCredits: CHECK_CREDITS, enrichment: enr ? { fields: JSON.parse(enr.raw_json).fields ?? {}, created_at: enr.created_at } : null });
+  // Offer to read the zoning rules only where we hold a zone code and nobody has read this place yet.
+  const sports = [...p.spec.requirements, ...p.spec.preferences].some((x) => x.field === 'zoning.sports_facility');
+  const zr = sports && c.zoning && (c.sports_verdict ?? 'unknown') === 'unknown' && c.county_fips !== '53033' ? await readingStatus(c.county_fips, c.city) : null;
+  res.json({ ...c, countyName: countyOf(c.county_fips)?.name ?? null, zoningRead: zr && zr.canRead && !zr.read ? { credits: zr.credits, zones: zr.zones.length } : null, keyFields: KEY_FIELDS, checkCredits: CHECK_CREDITS, enrichment: enr ? { fields: JSON.parse(enr.raw_json).fields ?? {}, created_at: enr.created_at } : null });
 }));
 app.patch('/api/projects/:id/reviews/:pin', wrap(async (req, res) => {
   const p = await projectOr404(req.params.id, req);
@@ -172,6 +180,14 @@ app.get('/api/projects/:id/fit', wrap(async (req, res) => {
   const out = [];
   for (const pin of pins.slice(0, 12)) { const c = await projectCandidate(p, pin); if (c) out.push(await fitStatement(p, c)); }
   res.json({ project: { id: p.id, name: p.name, version: p.spec_version }, statements: out });
+}));
+
+// ---------- Read a place's zoning rules from its code (stored once, shared; costs credits the first time) ----------
+app.post('/api/projects/:id/zoning/:pin', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id, req);
+  const c = await projectCandidate(p, req.params.pin);
+  if (!c) throw httpError(404, 'Parcel not found.');
+  res.json(await readZoning(req.user, { fips: c.county_fips, city: c.city }));
 }));
 
 // ---------- Web research on one parcel (cited findings; costs credits) ----------
