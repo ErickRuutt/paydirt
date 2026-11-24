@@ -10,17 +10,35 @@ const KING_LAYER = 'https://gismaps.kingcounty.gov/arcgis/rest/services/Property
 const PIERCE_LAYER = 'https://services2.arcgis.com/1UvBaQ5y1ubjUPmd/ArcGIS/rest/services/Tax_Parcels/FeatureServer/0';
 const CLALLAM_LAYER = 'https://websrv31.clallamcountywa.gov/server/rest/services/Parcels_Published/MapServer/1';
 
+// The layers of facts a county can come with, in the order a buyer needs them. Each county says which it has:
+// yes, partial (with what's missing), no, or site (checked one parcel at a time, not for the whole county).
+export const LAYERS = [
+  { key: 'parcels', label: 'Parcels and values', answers: 'Size, location, assessed value and current use' },
+  { key: 'owners', label: 'Owners', answers: 'Who owns it and where the tax bill goes' },
+  { key: 'sales', label: 'Sales history', answers: 'How long it has been held and how it last changed hands' },
+  { key: 'zoning', label: 'Zoning for your use', answers: 'Whether you can build this here' },
+  { key: 'environment', label: 'Flood, wetlands and slope', answers: 'How much of the site is buildable' },
+];
+const PER_SITE = { state: 'site', note: 'Checked one site at a time, from the parcel panel.' };
+const YES = { state: 'yes' }, NO = { state: 'no' };
+
 export const COUNTIES = {
   53033: { fips: '53033', name: 'King County', state: 'WA', layer: KING_LAYER, loadedByScript: true,
-    includes: 'address, owner signals, zoning verdicts, assessed values, sales history and current use', where: (min) => `KCA_ACRES >= ${Number(min)}`,
+    includes: 'address, owner signals, zoning verdicts, assessed values, sales history and current use',
+    layers: { parcels: YES, owners: { state: 'partial', note: 'Owner type and mailing address. The county withholds owner names from bulk data.' }, sales: YES,
+      zoning: { state: 'partial', note: 'Read for sports facilities in the county and its larger cities. Other uses and cities on request.' }, environment: PER_SITE },
+    where: (min) => `KCA_ACRES >= ${Number(min)}`,
     sources: { parcels: { label: 'King County GIS parcels', url: 'https://gismaps.kingcounty.gov/' }, assessor: { label: 'King County Assessor', url: 'https://info.kingcounty.gov/assessor/esales/Parcel.aspx' } } },
   53009: { fips: '53009', name: 'Clallam County', state: 'WA', layer: CLALLAM_LAYER, load: loadClallam,
     includes: 'owner, zoning code, assessed values, last deed date and site address where one exists',
+    layers: { parcels: YES, owners: YES, sales: { state: 'partial', note: 'Last deed date only, no prices or earlier sales.' },
+      zoning: { state: 'partial', note: 'Zone codes only. The rules for your use have not been read yet.' }, environment: PER_SITE },
     // Quotes count only parcels with assessed value: roads, national forest and water carry none.
     where: (min) => `ACRES_GIS >= ${Number(min)} AND (VALUE_LAND > 0 OR VALUE_IMPR > 0)`,
     sources: { parcels: { label: 'Clallam County GIS parcels', url: CLALLAM_LAYER }, assessor: { label: 'Clallam County Assessor', url: 'https://www.clallamcountywa.gov/279/Assessor' } } },
   53053: { fips: '53053', name: 'Pierce County', state: 'WA', layer: PIERCE_LAYER, load: loadPierce, townsFromCensus: true,
     includes: 'site address, assessed values, land use, tax exemptions and the owner\'s mailing city (no owner names or zoning yet)',
+    layers: { parcels: YES, owners: { state: 'partial', note: 'Mailing city only, no owner names.' }, sales: NO, zoning: NO, environment: PER_SITE },
     where: (min) => `Land_Acres >= ${Number(min)} AND (Land_Value > 0 OR Improvement_Value > 0)`,
     sources: { parcels: { label: 'Pierce County tax parcels', url: PIERCE_LAYER }, assessor: { label: 'Pierce County Assessor-Treasurer', url: 'https://atip.piercecountywa.gov/' } } },
 };
@@ -42,6 +60,7 @@ function statewide(fips) {
   if (!String(fips).startsWith('53') || !name) return null;
   return { fips: String(fips), name: `${name} County`, state: 'WA', layer: WA_LAYER, townsFromCensus: true,
     includes: 'site address, assessed values and land use (no owner names or zoning yet)',
+    layers: { parcels: YES, owners: NO, sales: NO, zoning: NO, environment: PER_SITE },
     where: (min) => `FIPS_NR = '${code}' AND Shape__Area >= ${Math.floor(Number(min) * SQFT_PER_ACRE * 0.98)} AND (VALUE_LAND > 0 OR VALUE_BLDG > 0)`,
     load: (min) => loadStatewide(code, `${name} County`, min),
     sources: { parcels: { label: 'Washington statewide parcels (2026)', url: 'https://geo.wa.gov/' }, assessor: { label: `${name} County Assessor`, url: null } } };

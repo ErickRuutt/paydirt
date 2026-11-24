@@ -91,3 +91,16 @@ test('a place with no parcels loaded comes back as uncovered, not just an empty 
   const res = await projectCandidates(p, { limit: 1 });
   assert.deepEqual(res.uncovered, ['Nowheresville']);
 });
+
+test('town names in a spec become the project\'s areas, and the search stays inside their county', async () => {
+  const p = await createProject({ name: 'test: areas', spec: { ...spec, requirements: [...spec.requirements, { field: 'area', value: ['Redmond'] }] } }, user); made.push(p.id);
+  assert.equal(p.spec.requirements.some((r) => r.field === 'area'), false, 'the criteria no longer hold the town');
+  assert.deepEqual(p.areas.map((a) => [a.county_fips, a.place]), [['53033', 'Redmond']]);
+  const res = await projectCandidates(p, { limit: 500 });
+  assert.ok(res.total > 0);
+  assert.ok(res.features.every((f) => f.properties.county_fips === '53033' && /redmond/i.test(`${f.properties.city} ${f.properties.postal_city}`)));
+  assert.equal(await previewCount(p, p.spec, { hidePassed: false }), res.total);
+  // A parcel outside the project's areas says so when opened directly.
+  const out = await one("SELECT pin FROM candidates WHERE excluded IS NULL AND acres BETWEEN 5 AND 80 AND COALESCE(city, '') NOT ILIKE '%redmond%' AND COALESCE(postal_city, '') NOT ILIKE '%redmond%' LIMIT 1");
+  assert.deepEqual((await projectCandidate(p, out.pin)).hiddenFields, ['area']);
+});

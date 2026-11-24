@@ -221,17 +221,12 @@ window.paydirtCriteria = (() => {
       case 'where': {
         const jur = must.jurisdiction?.length === 1 ? must.jurisdiction : ['city', 'unincorporated'];
         return {
-          html: `<label class="critField">Towns to include <input id="cvTowns" type="text" placeholder="Redmond, Sammamish, Duvall" value="${esc((must.area ?? []).join(', '))}"></label>`
+          html: `<p class="critField">${must.area?.length ? `Searching ${esc(must.area.join(', '))}.` : 'Searching everywhere you have unlocked.'} <button type="button" class="linkBtn" id="cvAreas">Change where to search</button></p>`
             + checks('jur', [['city', 'Inside a city'], ['unincorporated', 'Unincorporated county']], jur),
           read() {
-            const area = q('#cvTowns').value.split(',').map((x) => x.trim()).filter(Boolean);
             const j = ticked(q(''), 'jur');
             if (!j.length) return { error: 'Pick inside a city, unincorporated, or both.' };
-            const m = {};
-            if (area.length) m.area = area;
-            if (j.length === 1) m.jurisdiction = j;
-            if (!Object.keys(m).length) return { error: 'Name a town, or pick only one of the two.' };
-            return { must: m };
+            return { must: j.length === 1 ? { jurisdiction: j } : null };
           },
         };
       }
@@ -374,6 +369,12 @@ window.paydirtCriteria = (() => {
     const myGen = gen, live = () => gen === myGen;
     q = (s) => (s ? d.querySelector(s) : d);
     const form = d.querySelector('form');
+    // Places are managed in the "where to search" dialog; a draft has no project to attach them to yet.
+    const areasBtn = d.querySelector('#cvAreas');
+    if (areasBtn) {
+      areasBtn.hidden = !base.id || !window.paydirtAreas;
+      areasBtn.onclick = () => { d.close(); window.paydirtAreas.open({ projectId: base.id, onChanged: () => window.paydirtProjects?.reload(base.id) }); };
+    }
     let closed = false, saving = false, timer = null, seq = 0, invalid = false;
 
     const current = () => form.elements.matter.value;

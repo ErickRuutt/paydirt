@@ -17,6 +17,7 @@
     "sql": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/sql.js",
     "setup:notion": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/setup-notion-feedback.js",
     "addresses:fill": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/fill-addresses.js",
+    "areas:migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/migrate-areas.js",
     "credits:grant": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/grant-credits.js",
     "feedback:resend": "node --env-file-if-exists=.env scripts/resend-feedback.js",
     "test": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --test test/*.test.js"

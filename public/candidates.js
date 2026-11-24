@@ -109,50 +109,6 @@
   const showErr = (e) => { $('cCount').textContent = ''; $('cList').innerHTML = `<li class="msg err">${esc(e.message)}</li>`; };
 
   // ---------- Unlocking a place the project names but Paydirt doesn't cover ----------
-  const SIZES = [1, 5, 10, 20, 40];
-  // Default size: the project's Must minimum, else its Nice minimum, rounded down to a size we sell.
-  function unlockSize() {
-    const must = project.spec.requirements.find((r) => r.field === 'acres')?.value?.[0];
-    const nice = project.spec.preferences.find((p) => p.field === 'acres')?.params?.min;
-    const want = Number(must ?? nice ?? 5);
-    return [...SIZES].reverse().find((x) => x <= want) ?? 1;
-  }
-  async function paintUnlock(place, size) {
-    const li = [...$('cList').querySelectorAll('li.uncovered')].find((x) => x.dataset.place === place);
-    if (!li) return;
-    let q;
-    try { q = await api(`/api/areas/quote?${new URLSearchParams({ place, minAcres: size })}`); }
-    catch (e) { li.innerHTML = `<b>${esc(titleCase(place))} isn’t covered yet.</b><span>${esc(e.message)}</span><span class="btnRow"><button type="button" data-request-area="${esc(place)}">Request ${esc(titleCase(place))}</button><a href="areas.html">See all areas</a></span>`; return; }
-    const county = `${q.county}, ${q.state}`;
-    if (!q.supported) {
-      li.innerHTML = `<b>${esc(q.place)} is in ${esc(county)}, which isn’t covered yet.</b><span>${esc(q.why)}</span>
-        <span class="btnRow"><button type="button" data-request-area="${esc(`${q.place} (${county})`)}">Request ${esc(q.county)}</button><a href="areas.html">See all areas</a></span>`;
-      return;
-    }
-    if (q.unlocked && q.loaded) { li.innerHTML = `<b>${esc(county)} is unlocked.</b><span>No parcels named “${esc(titleCase(place))}” match. Check the spelling in the Where chip.</span>`; return; }
-    const enough = q.balance >= q.credits;
-    li.innerHTML = `<b>${esc(q.place)} is in ${esc(county)}.</b>
-      <span>Unlocking the county’s <strong>${q.parcels.toLocaleString()}</strong> parcels of
-        <select data-unlock-size aria-label="Parcel size">${q.sizes.map((x) => `<option value="${x}" ${x === q.minAcres ? 'selected' : ''}>${x}+ acres</option>`).join('')}</select>
-        costs <strong>${q.credits.toLocaleString()} credits</strong>. You have ${q.balance.toLocaleString()}.</span>
-      <span class="btnRow">${enough ? `<button type="button" data-unlock="${esc(place)}" data-size="${q.minAcres}">Unlock for ${q.credits.toLocaleString()} credits</button>`
-        : `<button type="button" disabled>Not enough credits</button>`}<button type="button" class="linkBtn" data-area-dialog="${esc(place)}">More options</button></span>
-      ${enough ? '' : '<span class="small">Ask us for credits with the Feedback button; card payments are coming.</span>'}`;
-  }
-  $('cList').addEventListener('change', (e) => {
-    const sel = e.target.closest('[data-unlock-size]'); if (!sel) return;
-    const li = sel.closest('li.uncovered'); paintUnlock(li.dataset.place, Number(sel.value));
-  });
-  async function unlock(btn) {
-    const li = btn.closest('li.uncovered');
-    btn.disabled = true; btn.textContent = 'Unlocking… loading parcels (about a minute)';
-    try {
-      const r = await api('/api/areas/unlock', { method: 'POST', body: { place: btn.dataset.unlock, minAcres: Number(btn.dataset.size) } });
-      li.innerHTML = `<b>${esc(r.county)} unlocked.</b><span>${(r.loaded ?? 0).toLocaleString()} parcels loaded. You have ${(r.balance ?? 0).toLocaleString()} credits left.</span>`;
-      await loadCandidates();
-    } catch (err) { btn.disabled = false; btn.textContent = 'Try again'; li.insertAdjacentHTML('beforeend', `<span class="msg err">${esc(err.message)}</span>`); }
-  }
-
   function renderCandList() {
     const shown = cand.features.slice(0, 150);
     const searching = Boolean($('cArea').value.trim());
@@ -170,16 +126,15 @@
         <button type="button" class="rowStar" data-star="${esc(p.pin)}" aria-pressed="${p.saved ? 'true' : 'false'}" title="${p.saved ? 'Saved to this project' : 'Save to this project'}" aria-label="${p.saved ? 'Unsave' : 'Save'} ${esc(siteTitle(p))}">${p.saved ? '★' : '☆'}</button>
       </li>`).join('') || `<li class="muted">${searching ? `Nothing found for “${esc($('cArea').value.trim())}”. <button type="button" class="linkBtn" data-area-dialog="${esc($('cArea').value.trim())}">Add it as a new area →</button>` : cand.uncovered?.length ? 'No sites: see above.' : 'No sites match this project.'}</li>`;
     if (cand.uncovered?.length) {
-      $('cList').insertAdjacentHTML('afterbegin', cand.uncovered.map((a) => `<li class="uncovered" data-place="${esc(a)}"><b>${esc(titleCase(a))} isn’t covered yet.</b><span class="muted">Checking what it takes to unlock…</span></li>`).join(''));
-      for (const a of cand.uncovered) paintUnlock(a, unlockSize());
+      // An area of this project with no parcels loaded: one notice, one way in (the "where to search" dialog).
+      $('cList').insertAdjacentHTML('afterbegin', cand.uncovered.map((a) => `<li class="uncovered"><b>${esc(a)} isn’t loaded yet.</b>
+        <span class="btnRow"><button type="button" data-area-dialog="${esc(a)}">See what unlocking takes</button></span></li>`).join(''));
     }
     window.paydirtTaper.apply($('cList'));
   }
   $('cList').onclick = async (e) => {
     const more = e.target.closest('[data-area-dialog]');
     if (more) { openAreas(more.dataset.areaDialog); return; }
-    const un = e.target.closest('[data-unlock]');
-    if (un) { unlock(un); return; }
     const ask = e.target.closest('[data-request-area]');
     if (ask) {
       ask.disabled = true; ask.textContent = 'Requesting…';
@@ -256,6 +211,8 @@
 
   function renderBar() {
     Criteria.render($('critChips'), project, catalog, { onChip: openEditor, onAdd: openEditor });
+    // The panel's sub-line names where this project searches.
+    $('county').textContent = project.areas?.length ? [...new Set(project.areas.map((a) => a.county_name ?? a.place))].join(' · ') : 'Everywhere you’ve unlocked';
     $('critVer').textContent = `v${project.spec_version}`;
     const h = project.history ?? [];
     const mine = h[0] && me && h[0].changed_by === me.user_uid;
@@ -318,7 +275,6 @@
     const b = e.target.closest('[data-proj]'); if (!b) return;
     showMenu(false);
     if (b.dataset.proj === 'rename') startRename();
-    else if (b.dataset.proj === 'area') openAreas();
     else window.paydirtBuilder.brief({ revise: true });
   };
 

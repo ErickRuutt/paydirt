@@ -1,6 +1,6 @@
-/* "Add an area" from inside a project: name a town, see its county and the unlock price, unlock it with credits
-   (or request it when Paydirt can't load it yet), add it to the project's Where, or ask for its zoning to be read
-   for this project's use. Everything it does is tied to the project. Used on the map, the Saved page and fit statements:
+/* "Where to search" for a project: the list of areas it searches, and adding one. Name a town or county and the
+   dialog says which of three states it is in (unlocked, ready to unlock, on request), what layers of facts the
+   county comes with, and the one thing to do next. Unlocking adds the place to the project in the same step. Used on the map, the Saved page and fit statements:
    window.paydirtAreas.open({ projectId, place?, focus?: 'zoning', onChanged? }) */
 window.paydirtAreas = (() => {
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -21,49 +21,58 @@ window.paydirtAreas = (() => {
     dlg.className = 'critDlg areaDlg';
     dlg.setAttribute('aria-labelledby', 'adTitle');
     dlg.innerHTML = `
-      <div class="adHead"><h2 id="adTitle" class="critTitle">add an area</h2><button type="button" class="ghost" data-close title="Close (Esc)">Close ✕</button></div>
+      <div class="adHead"><h2 id="adTitle" class="critTitle">where to search</h2><button type="button" class="ghost" data-close title="Close (Esc)">Close ✕</button></div>
       <p class="critKicker" id="adKicker"></p>
+      <section class="adList adFirst"><h3 class="lbl">This project searches</h3><div id="adAreas"><p class="muted small">Loading…</p></div></section>
       <form id="adForm" class="adForm">
-        <label>Town, city or county<input id="adPlace" required maxlength="120" placeholder="e.g. Sequim"></label>
-        <label>Parcel size<select id="adSize"></select></label>
+        <label>Add a town, city or county<input id="adPlace" required maxlength="120" placeholder="e.g. Sequim"></label>
         <button type="submit" id="adCheck">Check</button>
       </form>
       <div id="adResult" aria-live="polite"></div>
-      <section class="adList"><h3 class="lbl">This project’s areas</h3><div id="adMine"><p class="muted small">Loading…</p></div></section>
+      <section class="adList" id="adReqs" hidden><h3 class="lbl">Requests from this project</h3><div id="adMine"></div></section>
       <p class="adFoot lblish" id="adBalance"></p>`;
     document.body.append(dlg);
     $('[data-close]').onclick = () => dlg.close();
     $('#adForm').onsubmit = (e) => { e.preventDefault(); check(); };
     $('#adResult').addEventListener('click', onAction);
-    // A request whose county Paydirt can now load: go straight to its price.
-    $('#adMine').addEventListener('click', (e) => { const b = e.target.closest('[data-ready]'); if (!b) return; $('#adPlace').value = b.dataset.ready; check(); });
+    $('#adResult').addEventListener('change', (e) => { if (e.target.id === 'adSize') { st.size = Number(e.target.value); check(); } });
+    $('#adAreas').addEventListener('click', onArea);
   }
 
   // The project's use, in words, for zoning requests.
   const useOf = (p) => (p.spec.pending ?? []).find((x) => x.key === 'other_use_zoning')?.value?.replace(/^zoning that allows /i, '')
     ?? ([...p.spec.requirements, ...p.spec.preferences].some((x) => x.field === 'zoning.sports_facility') ? 'a sports facility' : p.name);
+  // Parcel size comes from the project's own size criterion; it can be changed under "Parcel size".
   function defaultSize(p, sizes) {
     const must = p.spec.requirements.find((r) => r.field === 'acres')?.value?.[0];
     const nice = p.spec.preferences.find((x) => x.field === 'acres')?.params?.min;
     const want = Number(must ?? nice ?? 5);
     return [...sizes].reverse().find((x) => x <= want) ?? sizes[0];
   }
-  const wherePlaces = (p) => (p.chips?.find((c) => c.key === 'where')?.must?.area ?? []).map((a) => a.toLowerCase());
 
+  const AREA_STATE = { ready: 'Not unlocked', on_request: 'On request', empty: 'No sites by this name' };
   async function loadMine() {
     const a = await call(`/api/projects/${st.project.id}/areas`);
     st.areas = a;
     $('#adBalance').textContent = `${a.balance.toLocaleString()} credits`;
-    if (!$('#adSize').options.length) $('#adSize').innerHTML = a.sizes.map((x) => `<option value="${x}">${x}+ acres</option>`).join('');
-    const rows = [
-      ...a.unlocks.map((u) => ({ when: u.created_at, what: `${u.county_name} unlocked`, detail: `${Number(u.loaded ?? u.parcels).toLocaleString()} parcels of ${Number(u.min_acres)}+ acres · ${u.credits} credits`, status: u.status === 'done' ? ['pass', 'Unlocked'] : u.status === 'failed' ? ['fail', 'Refunded'] : ['review', 'Loading'] })),
-      ...a.requests.map((r) => ({ when: r.created_at, what: r.area, detail: `${a.kinds[r.kind] ?? r.kind}${r.use_text ? ` · for ${r.use_text}` : ''}`,
-        ready: r.ready ? r.place : null,
-        status: r.ready ? ['pass', 'Ready to unlock'] : [r.status === 'unlocked' ? 'pass' : r.status === 'declined' ? 'fail' : 'review', a.statuses[r.status] ?? r.status] })),
-    ].sort((x, y) => new Date(y.when) - new Date(x.when));
-    $('#adMine').innerHTML = rows.length ? `<ul class="adRows">${rows.map((r) => `<li><div><b>${esc(r.what)}</b><span class="muted small">${esc(r.detail)} · ${esc(date(r.when))}</span></div>
-      ${r.ready ? `<button type="button" data-ready="${esc(r.ready)}">Unlock now</button>` : `<span class="pill ${r.status[0]}">${esc(r.status[1])}</span>`}</li>`).join('')}</ul>`
-      : '<p class="muted small">Nothing requested or unlocked from this project yet.</p>';
+    $('#adAreas').innerHTML = a.areas.length ? `<ul class="adRows">${a.areas.map((x) => `<li><div><b>${esc(x.label)}</b>
+        <span class="muted small">${esc(x.place ? x.county_name ?? 'County not found' : 'Whole county')}${x.state === 'loaded' ? ` · ${x.sites.toLocaleString()} sites` : ''}</span></div>
+        <span class="btnRow">${x.state === 'loaded' ? '' : x.state === 'ready' ? `<button type="button" data-check="${esc(x.place ?? x.label)}">See what unlocking takes</button>` : `<span class="pill review">${AREA_STATE[x.state]}</span>`}
+        <button type="button" class="linkBtn" data-remove="${esc(x.area_uid)}" aria-label="Stop searching ${esc(x.label)}">Remove</button></span></li>`).join('')}</ul>`
+      : '<p class="muted small">Everywhere your organization has unlocked. Add a town or county to narrow it.</p>';
+    const reqs = a.requests.filter((r) => r.status !== 'unlocked');
+    $('#adReqs').hidden = !reqs.length;
+    $('#adMine').innerHTML = `<ul class="adRows">${reqs.map((r) => `<li><div><b>${esc(r.area)}</b><span class="muted small">${esc(a.kinds[r.kind] ?? r.kind)}${r.use_text ? ` · for ${esc(r.use_text)}` : ''} · ${esc(date(r.created_at))}</span></div>
+      ${r.ready ? `<button type="button" data-check="${esc(r.place)}">Ready: unlock now</button>` : `<span class="pill ${r.status === 'declined' ? 'fail' : 'review'}">${esc(a.statuses[r.status] ?? r.status)}</span>`}</li>`).join('')}</ul>`;
+    $('#adMine').onclick = (e) => { const b = e.target.closest('[data-check]'); if (b) { $('#adPlace').value = b.dataset.check; check(); } };
+  }
+  async function onArea(e) {
+    const c = e.target.closest('[data-check]');
+    if (c) { $('#adPlace').value = c.dataset.check; return check(); }
+    const b = e.target.closest('[data-remove]'); if (!b) return;
+    b.disabled = true;
+    try { await call(`/api/projects/${st.project.id}/areas/${encodeURIComponent(b.dataset.remove)}`, { method: 'DELETE' }); await loadMine(); changed(); }
+    catch (err) { b.disabled = false; say(esc(err.message), true); }
   }
 
   const band = (tone, html) => `<div class="fitBand ${tone}">${html}</div>`;
@@ -72,84 +81,82 @@ window.paydirtAreas = (() => {
     const btn = $('#adCheck'); btn.disabled = true;
     $('#adResult').innerHTML = '<p class="muted">Finding the county and counting parcels…</p>';
     try {
-      const q = await call(`/api/areas/quote?${new URLSearchParams({ place, minAcres: $('#adSize').value })}`);
-      st.quote = q; paintQuote();
+      st.quote = await call(`/api/areas/quote?${new URLSearchParams({ place, minAcres: st.size })}`);
+      paintQuote();
     } catch (err) { $('#adResult').innerHTML = `<p class="msg err">${esc(err.message)}</p>`; }
     finally { btn.disabled = false; }
   }
-  function zoningButton(q) {
-    return `<button type="button" class="paper" data-act="zoning">Ask for ${esc(q.place)}’s zoning to be read for ${esc(useOf(st.project))}</button>`;
+
+  // What the county comes with, layer by layer: ● all of it, ◐ part of it, ○ not yet.
+  const MARK = { yes: ['●', 'Included'], partial: ['◐', 'Partly'], site: ['◐', 'Per site'], no: ['○', 'Not yet'] };
+  function ladderHtml(q) {
+    if (!q.layers?.length) return '';
+    const zoningAsk = (l) => (l.key === 'zoning' && l.state !== 'yes' && q.supported
+      ? ` <button type="button" class="linkBtn" data-act="zoning">Ask us to read it for ${esc(useOf(st.project))}</button>` : '');
+    return `<ul class="adLadder" aria-label="What ${esc(q.county)} comes with">${q.layers.map((l) => `<li class="${l.state}">
+      <span class="adMark" aria-hidden="true">${MARK[l.state][0]}</span>
+      <div><b>${esc(l.label)}</b> <span class="lblish">${MARK[l.state][1]}</span>
+        <span class="small">${esc(l.note ?? l.answers + '.')}${zoningAsk(l)}</span></div></li>`).join('')}</ul>`;
   }
-  function whereButton(q) {
-    if (wherePlaces(st.project).includes(q.place.toLowerCase())) return `<span class="small">${esc(q.place)} is already in this project’s Where.</span>`;
-    return `<button type="button" data-act="where">Add ${esc(q.place)} to this project’s Where</button>`;
-  }
+  const sizeHtml = (q) => `<details class="adSizeBox"><summary class="small">Parcel size: ${q.minAcres}+ acres, from this project’s size</summary>
+    <label class="small">Unlock parcels of <select id="adSize">${q.sizes.map((x) => `<option value="${x}" ${x === q.minAcres ? 'selected' : ''}>${x}+ acres</option>`).join('')}</select> Smaller parcels cost more because there are more of them.</label></details>`;
+  const inProject = (q) => (st.areas?.areas ?? []).find((a) => a.county_fips === q.fips && (!a.place || a.place.toLowerCase() === q.place.toLowerCase()));
+  const isCounty = (q) => q.place.toLowerCase() === q.county.toLowerCase();
   // "Sequim is in Clallam County, WA." or just "Hood River County, OR." when the place is the county itself.
-  const placeLine = (q) => (q.place.toLowerCase() === q.county.toLowerCase() ? `${esc(q.county)}, ${esc(q.state)}.` : `${esc(q.place)} is in ${esc(q.county)}, ${esc(q.state)}.`);
+  const placeLine = (q) => (isCounty(q) ? `${esc(q.county)}, ${esc(q.state)}` : `${esc(q.place)} is in ${esc(q.county)}, ${esc(q.state)}`);
+  const STATE = { in_plan: ['pass', 'Unlocked'], ready: ['review', 'Ready to unlock'], on_request: ['fail', 'On request'] };
+
   function paintQuote() {
-    const q = st.quote, county = `${q.county}, ${q.state}`;
-    if (!q.supported) {
-      $('#adResult').innerHTML = band('warn', `<b>${placeLine(q)}</b><span>${esc(q.why)}</span>
-        <span class="btnRow"><button type="button" data-act="request">Request ${esc(q.county)} for this project</button></span>`);
-    } else if (q.unlocked && q.loaded) {
-      $('#adResult').innerHTML = band('ok', `<b>${esc(county)} is in Paydirt.</b><span>${q.loaded.toLocaleString()} parcels of ${q.minAcres}+ acres are loaded.</span>
-        <span class="btnRow">${whereButton(q)}${zoningButton(q)}</span>`);
+    const q = st.quote, [tone, word] = STATE[q.stage];
+    const head = `<span class="adState"><span class="pill ${tone}">${word}</span> <b>${placeLine(q)}</b></span>`;
+    let body;
+    if (q.stage === 'on_request') {
+      body = `<span>Paydirt has no parcel source connected for ${esc(q.county)} yet, so it can’t be unlocked with credits. Request it and its status shows here; you’ll be able to unlock it yourself once the source is connected.</span>
+        <span class="btnRow"><button type="button" data-act="request">Request ${esc(q.county)}</button></span>`;
+    } else if (q.stage === 'in_plan') {
+      const there = inProject(q);
+      body = `<span>${q.loaded.toLocaleString()} parcels of ${q.minAcres}+ acres are loaded. Nothing more to pay.</span>${ladderHtml(q)}
+        <span class="btnRow">${there ? `<span class="small">${esc(there.label)} is already in this project’s search.</span>` : `<button type="button" data-act="add">Add ${esc(isCounty(q) ? q.county : q.place)} to this project</button>`}
+        ${!isCounty(q) && !(there && !there.place) ? `<button type="button" class="paper" data-act="addCounty">Search all of ${esc(q.county)}</button>` : ''}</span>`;
     } else {
       const enough = q.balance >= q.credits;
-      $('#adResult').innerHTML = band(enough ? 'ok' : 'warn', `<b>${placeLine(q)}</b>
-        <span>Unlocking the county’s <strong>${q.parcels.toLocaleString()}</strong> parcels of ${q.minAcres}+ acres costs <strong>${q.credits.toLocaleString()} credits</strong>. You have ${q.balance.toLocaleString()}.</span>
-        <span class="small">You get every ${q.minAcres}+ acre parcel in the county${q.includes ? `, with ${esc(q.includes)}` : ''}.</span>
-        <span class="btnRow">${enough ? `<button type="button" data-act="unlock">Unlock for ${q.credits.toLocaleString()} credits</button>` : '<button type="button" disabled>Not enough credits</button>'}
-          <button type="button" class="paper" data-act="request">Request it instead</button></span>
-        ${enough ? '' : '<span class="small">Ask us for credits with the Feedback button; card payments are coming.</span>'}`);
+      body = `<span><strong>${q.credits.toLocaleString()} credits</strong> unlocks all ${q.parcels.toLocaleString()} parcels of ${q.minAcres}+ acres in ${esc(q.county)}, for every project in your organization. You have ${q.balance.toLocaleString()}. Loading takes about a minute.</span>
+        <span class="lbl">What you get: ${q.covered} of ${q.of} layers</span>${ladderHtml(q)}
+        <span class="btnRow"><button type="button" data-act="unlock" ${enough ? '' : 'disabled'}>${enough ? `Unlock and add to this project · ${q.credits.toLocaleString()} credits` : 'Not enough credits'}</button></span>
+        ${enough ? '' : '<span class="small">Ask us for credits with the Feedback button; card payments are coming.</span>'}${sizeHtml(q)}`;
     }
-    if (st.focus === 'zoning' && q.unlocked) $('#adResult [data-act="zoning"]')?.focus();
+    $('#adResult').innerHTML = band(q.stage === 'in_plan' ? 'ok' : 'plain', head + body);
+    if (st.focus === 'zoning') $('#adResult [data-act="zoning"]')?.focus();
   }
   const say = (html, err) => $('#adResult').insertAdjacentHTML('beforeend', `<p class="msg ${err ? 'err' : ''}">${html}</p>`);
 
   async function onAction(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const q = st.quote, p = st.project, act = b.dataset.act;
+    const area = `${q.place} (${q.county}, ${q.state})`;
     b.disabled = true;
     try {
       if (act === 'unlock') {
         b.textContent = 'Unlocking… loading parcels (about a minute)';
         const r = await call('/api/areas/unlock', { method: 'POST', body: { place: q.place, minAcres: q.minAcres, projectId: p.id } });
-        st.quote = { ...q, unlocked: true, loaded: r.loaded, balance: r.balance };
-        paintQuote(); say(`Unlocked: ${(r.loaded ?? 0).toLocaleString()} parcels loaded. ${r.balance.toLocaleString()} credits left.`);
-        changed();
+        st.quote = { ...q, ...r };
+        await loadMine(); paintQuote();
+        say(`Unlocked and added to this project: ${(r.loaded ?? 0).toLocaleString()} parcels loaded. ${r.balance.toLocaleString()} credits left.`);
+        changed(); return;
+      } else if (act === 'add' || act === 'addCounty') {
+        await call(`/api/projects/${p.id}/areas`, { method: 'POST', body: { place: q.place, wholeCounty: act === 'addCounty' } });
+        await loadMine(); paintQuote(); changed(); return;
       } else if (act === 'request') {
-        await call('/api/areas/requests', { method: 'POST', body: { kind: q.supported ? 'city' : 'county', area: `${q.place} (${q.county}, ${q.state})`, useText: useOf(p), projectId: p.id, countyFips: q.fips, notes: `From project "${p.name}".` } });
-        b.textContent = 'Requested ✓'; say('Requested. Its status shows below.');
+        await call('/api/areas/requests', { method: 'POST', body: { kind: 'county', area, useText: useOf(p), projectId: p.id, countyFips: q.fips, notes: `From project "${p.name}".` } });
+        b.textContent = 'Requested ✓';
       } else if (act === 'zoning') {
-        await call('/api/areas/requests', { method: 'POST', body: { kind: 'zoning', area: `${q.place} (${q.county}, ${q.state})`, useText: useOf(p), projectId: p.id, countyFips: q.fips, notes: `From project "${p.name}".` } });
+        await call('/api/areas/requests', { method: 'POST', body: { kind: 'zoning', area, useText: useOf(p), projectId: p.id, countyFips: q.fips, notes: `From project "${p.name}".` } });
         b.textContent = 'Zoning requested ✓';
-      } else if (act === 'where') {
-        await addToWhere(q.place);
-        b.replaceWith(Object.assign(document.createElement('span'), { className: 'small', textContent: `${q.place} added to this project’s Where.` }));
-        changed();
       }
       await loadMine();
     } catch (err) { b.disabled = false; say(esc(err.message), true); }
   }
 
-  // Add a place to the Where chip, keeping whatever else the chip says (e.g. city vs unincorporated).
-  async function addToWhere(place) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const where = st.project.chips?.find((c) => c.key === 'where');
-      const must = { ...(where?.must ?? {}) };
-      const areas = must.area ?? [];
-      if (areas.some((a) => a.toLowerCase() === place.toLowerCase())) return;
-      must.area = [...areas, place];
-      try {
-        st.project = await call(`/api/projects/${st.project.id}`, { method: 'PUT', body: { chip: { key: 'where', edit: { must, nice: null } }, baseVersion: st.project.spec_version } });
-        return;
-      } catch (err) {
-        if (err.status === 409 && err.body?.project) { st.project = err.body.project; continue; } // a teammate saved first: add to theirs
-        throw err;
-      }
-    }
-  }
   function changed() {
     document.dispatchEvent(new CustomEvent('paydirt:changed'));
     st.onChanged?.(st.project);
@@ -164,7 +171,7 @@ window.paydirtAreas = (() => {
       st.project = await call(`/api/projects/${projectId}`);
       $('#adKicker').textContent = st.project.name;
       await loadMine();
-      $('#adSize').value = String(defaultSize(st.project, st.areas.sizes));
+      st.size = defaultSize(st.project, st.areas.sizes);
       if (place) await check(); else $('#adPlace').focus();
     } catch (err) { $('#adResult').innerHTML = `<p class="msg err">${esc(err.message)}</p>`; }
   }

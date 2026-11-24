@@ -18,7 +18,8 @@ import { fitStatement } from './fit.js';
 import { nearRoad } from './addresses.js';
 import { researchParcel, latestResearch, RESEARCH_CREDITS } from './research.js';
 import { coverage, listRequests, requestArea, AREA_KINDS, AREA_STATUSES } from './areas.js';
-import { quote, unlockCounty, listUnlocks, creditBalance, SIZES } from './unlock.js';
+import { quote, unlockCounty, listUnlocks, creditBalance, resolvePlace, SIZES } from './unlock.js';
+import { listAreas, addArea, removeArea, areaLabel } from './projectAreas.js';
 
 const criteria = JSON.parse(readFileSync(new URL('../criteria.json', import.meta.url)));
 const app = express();
@@ -28,7 +29,14 @@ app.use(express.static(new URL('../public/', import.meta.url).pathname));
 const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((err) => {
   res.status(err.status ?? 500).json({ error: err.message, ...(err.project ? { project: withChips(err.project) } : {}) });
 });
-const withChips = (p) => (p?.spec ? { ...p, chips: specToChips(p.spec) } : p);
+// The Where chip shows the project's areas (kept apart from the criteria, src/projectAreas.js) next to its own rules.
+function withChips(p) {
+  if (!p?.spec) return p;
+  const chips = specToChips(p.spec);
+  const where = chips.find((c) => c.key === 'where');
+  if (where && p.areas?.length) where.must = { ...(where.must ?? {}), area: p.areas.map(areaLabel) };
+  return { ...p, chips };
+}
 // Sign-in: the page and its static files are public; every /api route except the key lookup needs a Clerk session.
 app.get('/api/auth-config', (req, res) => res.json({ publishableKey: process.env.CLERK_PUBLISHABLE_KEY ?? null }));
 app.use('/api', clerkMiddleware(), (req, res, next) => {
@@ -186,8 +194,20 @@ app.post('/api/areas/unlock', wrap(async (req, res) => {
 // One project's areas: what it has requested and unlocked, plus the credit balance.
 app.get('/api/projects/:id/areas', wrap(async (req, res) => {
   const p = await projectOr404(req.params.id, req);
-  res.json({ requests: await listRequests(req.user.orgUid, p.id), unlocks: await listUnlocks(req.user.orgUid, p.id),
+  res.json({ areas: await listAreas(p), requests: await listRequests(req.user.orgUid, p.id), unlocks: await listUnlocks(req.user.orgUid, p.id),
     balance: await creditBalance(req.user.orgUid), sizes: SIZES, kinds: AREA_KINDS, statuses: AREA_STATUSES });
+}));
+// Add a place Paydirt already holds to a project's search, or take one out. { place, wholeCounty }
+app.post('/api/projects/:id/areas', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id, req);
+  const at = await resolvePlace(req.body?.place);
+  await addArea(p, { fips: at.fips, countyName: `${at.county}, ${at.state}`, place: req.body?.wholeCounty ? null : at.place }, req.user);
+  res.json({ areas: await listAreas(p) });
+}));
+app.delete('/api/projects/:id/areas/:uid', wrap(async (req, res) => {
+  const p = await projectOr404(req.params.id, req);
+  await removeArea(p, req.params.uid);
+  res.json({ areas: await listAreas(p) });
 }));
 app.post('/api/areas/requests', wrap(async (req, res) => {
   if (req.body?.projectId) await projectOr404(req.body.projectId, req);

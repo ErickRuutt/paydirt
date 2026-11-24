@@ -388,3 +388,36 @@ ALTER TABLE county_unlocks ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCE
 -- Added Nov 23, 2026: the county a request is for, so it can show "Ready to unlock" once Paydirt can load that
 -- county and close itself when the county is unlocked.
 ALTER TABLE area_requests ADD COLUMN IF NOT EXISTS county_fips TEXT;
+
+-- Added Nov 23, 2026: a project's search areas. One row per place the project searches: a county, optionally
+-- narrowed to a town in it (place NULL = the whole county). Replaces town names typed into the Where criterion,
+-- so "Auburn" always means Auburn in one county. county_fips is NULL only for a name Paydirt couldn't place.
+CREATE TABLE IF NOT EXISTS project_areas (
+  area_uid TEXT PRIMARY KEY,                -- par_…
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  county_fips TEXT,
+  county_name TEXT,                         -- "Clallam County, WA"
+  place TEXT,                               -- town inside the county, or NULL for all of it
+  added_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS project_areas_one ON project_areas (project_id, COALESCE(county_fips, ''), lower(COALESCE(place, '')));
+
+-- Added Nov 23, 2026: what Paydirt holds for each county, one row per layer of facts (parcels, owners, sales,
+-- zoning, environment). Says where it came from, what it cost us, the terms we hold it under and how fresh it is.
+-- The unlock screen reads this to show what an unlock does and doesn't include.
+CREATE TABLE IF NOT EXISTS datasets (
+  county_fips TEXT NOT NULL,
+  layer TEXT NOT NULL,                      -- parcels / owners / sales / zoning / environment
+  status TEXT NOT NULL DEFAULT 'loaded',    -- loaded / partial
+  rows INTEGER,
+  min_acres DOUBLE PRECISION,
+  source_label TEXT,
+  source_url TEXT,
+  licence TEXT,                             -- e.g. public record
+  cost_usd DOUBLE PRECISION DEFAULT 0,      -- what we paid for it (0 = free public source)
+  note TEXT,
+  as_of TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (county_fips, layer)
+);

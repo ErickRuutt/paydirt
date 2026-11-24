@@ -2,6 +2,8 @@ import { all, one, run, pool } from './db.js';
 import { normalizeSpec, compileSpec, failedChecks } from './spec.js';
 import { newId } from './ids.js';
 import { logEvent } from './identity.js';
+import { areasOf, areasOfMany, areaFilter, inAreas, areaLabel, placeAreas } from './projectAreas.js';
+import { resolvePlace } from './unlock.js';
 
 // Projects: one buyer's search, owned by an organization. Members of the org see its projects;
 // project_members records who created/joined, ready for per-project access later.
@@ -9,24 +11,36 @@ import { logEvent } from './identity.js';
 const parse = (r) => r && { ...r, spec: JSON.parse(r.spec) };
 
 export async function listProjects(orgUid) {
-  return (await all(`SELECT p.id, p.project_uid, p.name, p.brief, p.spec, p.spec_version, p.created_by, p.created_at, p.updated_at,
+  const rows = (await all(`SELECT p.id, p.project_uid, p.name, p.brief, p.spec, p.spec_version, p.created_by, p.created_at, p.updated_at,
       (SELECT count(*)::int FROM project_properties pp WHERE pp.project_id = p.id AND pp.saved) AS saved,
       (SELECT count(*)::int FROM project_properties pp WHERE pp.project_id = p.id AND pp.status = 'shortlist') AS shortlisted,
       (SELECT max(pp.updated_at) FROM project_properties pp WHERE pp.project_id = p.id) AS last_activity
     FROM projects p WHERE NOT p.archived AND p.org_uid = ? ORDER BY COALESCE((SELECT max(pp.updated_at) FROM project_properties pp WHERE pp.project_id = p.id), p.updated_at) DESC`, [orgUid])).map(parse);
+  const areas = await areasOfMany(rows.map((r) => r.id));
+  return rows.map((r) => ({ ...r, areas: areas.get(r.id) ?? [] }));
 }
 
 // A project is only visible to its own organization.
 export async function getProject(id, orgUid) {
   const p = id ? await one('SELECT * FROM projects WHERE id = ? AND org_uid = ? AND NOT archived', [Number(id), orgUid])
     : await one('SELECT * FROM projects WHERE org_uid = ? AND NOT archived ORDER BY updated_at DESC LIMIT 1', [orgUid]);
-  return parse(p);
+  return p ? { ...parse(p), areas: await areasOf(p.id) } : null;
+}
+
+// Town names don't live in the criteria: they become the project's areas (src/projectAreas.js). This takes them
+// out of a spec that still carries them (a brief's draft, an older client) and returns the names.
+function takeAreaNames(spec) {
+  const names = [];
+  if (!spec?.requirements) return names;
+  spec.requirements = spec.requirements.filter((r) => { if (r.field !== 'area') return true; names.push(...(r.value ?? [])); return false; });
+  return names;
 }
 
 export async function createProject({ name, brief = '', spec }, user, source = 'form') {
   const userId = user?.uid ?? null;
   const { spec: s, errors } = normalizeSpec(spec);
   if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
+  const places = takeAreaNames(s);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -36,6 +50,7 @@ export async function createProject({ name, brief = '', spec }, user, source = '
       [p.id, JSON.stringify(s), 'Project created', source, userId ?? null]);
     if (userId) await client.query("INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING", [p.id, userId]);
     await client.query('COMMIT');
+    if (places.length) await placeAreas({ id: p.id }, places, user, resolvePlace);
     return getProject(p.id, user?.orgUid);
   } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
 }
@@ -47,6 +62,7 @@ export async function updateProject(id, { name, brief, spec, changeNote = '', ba
   if (!p) throw Object.assign(new Error('Project not found.'), { status: 404 });
   const normalized = spec != null ? normalizeSpec(spec) : null;
   if (normalized?.errors.length) throw Object.assign(new Error(normalized.errors.join(' ')), { status: 400 });
+  const places = normalized ? takeAreaNames(normalized.spec) : [];
   // One transaction, row-locked: a save based on an older version than the one stored is refused (409),
   // so two people editing at once never silently overwrite each other.
   const client = await pool.connect();
@@ -66,7 +82,7 @@ export async function updateProject(id, { name, brief, spec, changeNote = '', ba
     }
     // Compare against the stored spec normalized the same way, so a spec saved before a key existed
     // (e.g. one without `pending`) doesn't register a no-op save as a change.
-    if (normalized && JSON.stringify(normalized.spec) !== JSON.stringify(normalizeSpec(cur.spec).spec)) {
+    if (normalized && JSON.stringify(normalized.spec) !== JSON.stringify(normalizeSpec(typeof cur.spec === 'string' ? JSON.parse(cur.spec) : cur.spec).spec)) {
       const version = cur.spec_version + 1;
       await client.query('UPDATE projects SET spec = $1, spec_version = $2, updated_at = now() WHERE id = $3', [JSON.stringify(normalized.spec), version, p.id]);
       await client.query('INSERT INTO project_spec_history (project_id, version, spec, change_note, source, changed_by) VALUES ($1, $2, $3, $4, $5, $6)',
@@ -77,6 +93,7 @@ export async function updateProject(id, { name, brief, spec, changeNote = '', ba
     if (!released) await client.query('ROLLBACK').catch(() => {});
     throw e;
   } finally { if (!released) client.release(); }
+  if (places.length) await placeAreas(p, places, user, resolvePlace);
   return getProject(p.id, user?.orgUid);
 }
 
@@ -86,10 +103,14 @@ export async function previewCount(project, spec, { hidePassed } = {}) {
   if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
   const k = compileSpec(s);
   const where = ['c.excluded IS NULL', ...k.where];
+  const params = [...k.whereParams];
+  // A draft that names its own towns is counted by them; otherwise the project's areas apply.
+  const scope = s.requirements.some((r) => r.field === 'area') ? null : areaFilter(project.areas);
+  if (scope) { where.push(scope.sql); params.push(...scope.params); }
   if (hidePassed) where.push("COALESCE(r.status, 'new') <> 'rejected'");
   const row = await one(`SELECT count(*)::int AS n FROM candidates c
     LEFT JOIN project_properties r ON r.property_uid = c.property_uid AND r.project_id = ${Number(project.id)}
-    WHERE ${where.join(' AND ')}`, k.whereParams);
+    WHERE ${where.join(' AND ')}`, params);
   return row.n;
 }
 
@@ -154,6 +175,8 @@ export async function projectCandidates(project, filters = {}) {
   const where = ['c.excluded IS NULL', ...(searching ? [] : k.where)];
   const params = searching ? [] : [...k.whereParams];
   const add = (sql, ...v) => { where.push(sql); params.push(...v); };
+  const scope = searching || filters.pins ? null : areaFilter(project.areas);
+  if (scope) add(scope.sql, ...scope.params);
   if (filters.minAcres) add('c.acres >= ?', Number(filters.minAcres));
   if (filters.maxAcres) add('c.acres <= ?', Number(filters.maxAcres));
   if (filters.verdict) add('c.sports_verdict = ANY(?)', String(filters.verdict).split(','));
@@ -180,11 +203,15 @@ export async function projectCandidates(project, filters = {}) {
   const allParams = [...k.scoreParams, ...params];
   const rows = await all(`SELECT * FROM (${sql}) t WHERE score >= ${minScore} ORDER BY score DESC, acres DESC LIMIT ${limit}`, allParams);
   const total = (await one(`SELECT count(*)::int AS n FROM (${sql}) t WHERE score >= ${minScore}`, allParams)).n;
-  // Places the project names that Paydirt holds no parcels for (e.g. a town outside the loaded counties):
-  // the map says so and offers to request them, instead of showing an unexplained empty list.
-  const places = searching ? [] : (project.spec.requirements.find((r) => r.field === 'area')?.value ?? []);
+  // Areas of the project that Paydirt holds no parcels for (e.g. a town in a county that isn't loaded): the map
+  // says so and offers to unlock or request them, instead of showing an unexplained empty list.
   const uncovered = [];
-  for (const a of places) {
+  for (const a of searching ? [] : project.areas ?? []) {
+    const f = areaFilter([a]);
+    if (f && !(await one(`SELECT 1 FROM candidates c WHERE ${f.sql} LIMIT 1`, f.params))) uncovered.push(areaLabel(a));
+  }
+  // Older projects that still name towns in their criteria.
+  for (const a of searching ? [] : (project.spec.requirements.find((r) => r.field === 'area')?.value ?? [])) {
     const hit = await one("SELECT 1 FROM candidates WHERE COALESCE(city, '') ILIKE ? OR COALESCE(postal_city, '') ILIKE ? LIMIT 1", [`%${a}%`, `%${a}%`]);
     if (!hit) uncovered.push(a);
   }
@@ -213,6 +240,7 @@ export async function projectCandidate(project, pin) {
   const c = await one(sql, [...k.scoreParams, pin]);
   if (!c) return null;
   const fails = c.excluded ? [{ field: 'excluded', reason: c.excluded }] : failedChecks(project.spec, c);
+  if (!c.excluded && !inAreas(project.areas, c)) fails.unshift({ field: 'area', reason: `Where: not in ${project.areas.map(areaLabel).join(', ')}` });
   return {
     ...c, geometry: JSON.parse(c.geometry_json), geometry_json: undefined, signals: JSON.parse(c.signals ?? '[]'),
     tags: JSON.parse(c.tags ?? '[]'), businesses: JSON.parse(c.businesses ?? '[]'),

@@ -4,6 +4,8 @@ import { httpError } from './mireye.js';
 import { countyOf, countParcels } from './counties.js';
 import { fillAddresses } from './addresses.js';
 import { closeRequestsFor } from './areas.js';
+import { ladder, recordDatasets } from './datasets.js';
+import { addArea } from './projectAreas.js';
 import { insertMany, setMeta } from '../scripts/lib/pg-script.js';
 import { syncProperties } from '../scripts/lib/properties.js';
 
@@ -49,8 +51,12 @@ export async function quote(orgUid, { place, minAcres = 10 }) {
   const loaded = (await one("SELECT count(*)::int AS n FROM candidates WHERE county_fips = ? AND acres >= ? AND excluded IS DISTINCT FROM 'no assessed value (public land, roads or water)'", [p.fips, minAcres])).n;
   const owned = await one(`SELECT unlock_uid, min_acres, created_at FROM county_unlocks WHERE org_uid = ? AND county_fips = ? AND status = 'done'
     AND min_acres <= ? ORDER BY created_at DESC LIMIT 1`, [orgUid ?? null, p.fips, minAcres]);
-  const base = { ...p, minAcres, sizes: SIZES, balance: await creditBalance(orgUid), loaded, unlocked: Boolean(owned || c?.loadedByScript) };
-  if (!c || (!c.load && !c.loadedByScript)) {
+  const unlocked = Boolean(owned || c?.loadedByScript);
+  // One of three stages, so the screen never has to work it out: in_plan, ready or on_request. (`state` is the US state.)
+  const supported = Boolean(c && (c.load || c.loadedByScript));
+  const base = { ...p, minAcres, sizes: SIZES, balance: await creditBalance(orgUid), loaded, unlocked,
+    stage: unlocked && loaded ? 'in_plan' : supported ? 'ready' : 'on_request', ...(c ? await ladder(p.fips, unlocked) : { layers: [], covered: 0, of: 0 }) };
+  if (!supported) {
     return { ...base, supported: false, parcels: null, credits: null,
       why: `Paydirt can't load ${p.county}, ${p.state} on its own yet: its parcel source hasn't been connected. Request it and we'll add it.` };
   }
@@ -65,7 +71,9 @@ export async function unlockCounty(user, { place, minAcres, projectId }) {
   if (!orgUid) throw httpError(403, 'Join an organization before unlocking areas.');
   const q = await quote(orgUid, { place, minAcres });
   if (!q.supported) throw httpError(400, q.why);
-  if (q.unlocked) { await closeRequestsFor(orgUid, q.fips); return { ...q, status: 'done', already: true }; }
+  // Unlocking from a project puts the place in that project's search in the same step.
+  const toProject = async () => { if (Number(projectId)) await addArea({ id: Number(projectId) }, { fips: q.fips, countyName: `${q.county}, ${q.state}`, place: q.place }, user); };
+  if (q.unlocked) { await closeRequestsFor(orgUid, q.fips); await toProject(); return { ...q, status: 'done', already: true }; }
   const uid = newId('unl');
   const client = await pool.connect();
   try {
@@ -84,7 +92,8 @@ export async function unlockCounty(user, { place, minAcres, projectId }) {
     const n = q.loaded >= q.parcels * 0.95 ? q.loaded : await loadCounty(q.fips, q.minAcres); // already loaded for someone else
     await one("UPDATE county_unlocks SET status = 'done', loaded = ?, finished_at = now() WHERE unlock_uid = ? RETURNING unlock_uid", [n, uid]);
     await closeRequestsFor(orgUid, q.fips);
-    return { ...q, status: 'done', loaded: n, balance: await creditBalance(orgUid) };
+    await toProject();
+    return { ...q, status: 'done', stage: 'in_plan', unlocked: true, loaded: n, balance: await creditBalance(orgUid), ...(await ladder(q.fips, true)) };
   } catch (e) {
     await one("UPDATE county_unlocks SET status = 'failed', error = ?, finished_at = now() WHERE unlock_uid = ? RETURNING unlock_uid", [String(e.message).slice(0, 500), uid]);
     await one(`INSERT INTO credit_ledger (entry_uid, org_uid, delta, reason, ref, note) VALUES (?, ?, ?, 'refund', ?, ?) RETURNING entry_uid`,
@@ -110,6 +119,7 @@ export async function loadCounty(fips, minAcres) {
     await client.query('UPDATE candidates c SET property_uid = p.property_uid FROM properties p WHERE p.source = $1 AND p.source_id = c.pin AND c.county_fips = $2', [source, fips]);
     await setMeta(client, `candidates_${fips}`, rows.length, sourceLabel);
     await client.query('COMMIT');
+    await recordDatasets(fips, { rows: rows.length, minAcres });
   } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
   // Addresses are a nice-to-have: a failure here never undoes the unlock.
   await fillAddresses(fips).catch((e) => console.error(`Addresses for ${fips}: ${e.message}`));
