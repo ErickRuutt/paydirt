@@ -102,7 +102,7 @@ Stop after about 8 questions, or sooner when you have enough, or when the person
 // ---------- Calls ----------
 async function callClaude({ system, messages, schema, endpoint }) {
   const spent = await totalSpend();
-  if (spent + QUOTE_USD > MAX_SPEND) throw Object.assign(new Error(`Spend cap reached: $${spent.toFixed(2)} of $${MAX_SPEND.toFixed(2)} used.`), { status: 402 });
+  if (spent + QUOTE_USD > MAX_SPEND) throw Object.assign(new Error('This is paused for now: Paydirt has reached its own data budget. Tell us with the Feedback button and we\'ll raise it.'), { status: 402 });
   const callId = (await one('INSERT INTO api_calls (endpoint, request_json) VALUES (?, ?) RETURNING id',
     [endpoint, JSON.stringify({ model: MODEL, turns: messages.length })])).id;
   let res;

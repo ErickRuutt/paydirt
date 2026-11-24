@@ -78,7 +78,7 @@ export async function researchParcel(user, c) {
   const bal = (await one('SELECT COALESCE(sum(delta), 0)::int AS n FROM credit_ledger WHERE org_uid = ?', [orgUid])).n;
   if (bal < RESEARCH_CREDITS) throw Object.assign(new Error(`Research costs ${RESEARCH_CREDITS} credit; you have ${bal}.`), { status: 402 });
   const spent = await totalSpend();
-  if (spent + 0.5 > MAX_SPEND) throw Object.assign(new Error(`Spend cap reached: $${spent.toFixed(2)} of $${MAX_SPEND.toFixed(2)} used.`), { status: 402 });
+  if (spent + 0.5 > MAX_SPEND) throw Object.assign(new Error('This is paused for now: Paydirt has reached its own data budget. Tell us with the Feedback button and we\'ll raise it.'), { status: 402 });
 
   const callId = (await one('INSERT INTO api_calls (endpoint, request_json) VALUES (?, ?) RETURNING id', ['claude/research', JSON.stringify({ model: MODEL, pin: c.pin })])).id;
   const messages = [{ role: 'user', content: describe(c) }];

@@ -31,7 +31,7 @@
       try {
         const d = await api('/api/drafts/from-text', { method: 'POST', body: { text: $('brText').value, projectId: revise ? cur.id : null } });
         source = 'markdown';
-        $('brMsg').textContent = `Draft ready (about $${d.costUsd.toFixed(3)}).`;
+        $('brMsg').textContent = 'Draft ready.';
         showDraft($('brOut'), d, revise ? cur : null);
         refreshSpend();
       } catch (err) { $('brMsg').className = 'msg err'; $('brMsg').textContent = err.message; }

@@ -37,7 +37,7 @@ async function call(endpoint, body, { quoteUsd, timeoutMs }) {
   if (!key) throw httpError(400, 'Paid parcel data isn\'t set up on this server (MIREYE_API_KEY).');
   const spent = await totalSpend();
   if (spent + quoteUsd > MAX_SPEND) {
-    throw httpError(402, `Spend cap reached: $${spent.toFixed(2)} of $${MAX_SPEND.toFixed(2)} used. Raise MAX_SPEND_USD in .env to continue.`);
+    throw httpError(402, 'This is paused for now: Paydirt has reached its own data budget. Tell us with the Feedback button and we\'ll raise it.');
   }
   const callId = (await one('INSERT INTO api_calls (endpoint, request_json) VALUES (?, ?) RETURNING id', [endpoint, JSON.stringify(body)])).id;
 

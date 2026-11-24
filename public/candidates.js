@@ -400,9 +400,9 @@
         <dt>Building value</dt><dd>${fmt.usd(c.impr_value)}</dd></dl>
         <p class="muted" style="font-size:12px;margin:0">County assessed values, not market prices.</p></section>
       <section><h2>Buildable check</h2>
-        <p class="muted" style="font-size:12px;margin:0">Slope, wetlands, flood zone and owner name for this parcel. $0.02.</p>
+        <p class="muted" style="font-size:12px;margin:0">Slope, wetlands, flood zone and zone code for this site. ${c.checkCredits ?? 1} credit; the result is kept.</p>
         <div id="cEnrichOut"></div>
-        <button id="cEnrichBtn" type="button">${c.enrichment ? 'Check again' : 'Check slope, wetlands & flood'} · $0.02</button><p id="cEnrichMsg" class="msg"></p></section>
+        <button id="cEnrichBtn" type="button">${c.enrichment ? 'Check again' : 'Check slope, wetlands & flood'} · ${c.checkCredits ?? 1} credit</button><p id="cEnrichMsg" class="msg"></p></section>
       <section><h2>Review</h2>
         <select id="cRevStatus" aria-label="Status">${Object.entries(STATUS_TEXT).map(([s, t]) => `<option value="${s}" ${c.status === s ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <textarea id="cRevNotes" placeholder="Notes: site visit, owner contact, broker intel…">${esc(c.notes)}</textarea>
@@ -417,8 +417,7 @@
       $('cEnrichBtn').disabled = true; $('cEnrichMsg').className = 'msg'; $('cEnrichMsg').textContent = 'Checking…';
       try {
         const r = await api(`/api/candidates/${encodeURIComponent(c.pin)}/enrich`, { method: 'POST', body: {} });
-        setSpend(r.spentUsd);
-        $('cEnrichMsg').textContent = `Match: ${r.status}. Charged $${Number(r.chargedUsd).toFixed(2)}.${r.samePin === false ? ` Warning: matched a different parcel (${esc(r.matchedParcel)}).` : ''}`;
+        $('cEnrichMsg').textContent = `Match: ${r.status}. ${r.credits} credit used; ${Number(r.balance).toLocaleString()} left.${r.samePin === false ? ` Warning: matched a different parcel (${esc(r.matchedParcel)}).` : ''}`;
         showKeyFields(r.fields, c.keyFields);
       } catch (e) { $('cEnrichMsg').className = 'msg err'; $('cEnrichMsg').textContent = e.message; }
       finally { $('cEnrichBtn').disabled = false; }

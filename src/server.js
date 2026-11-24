@@ -8,6 +8,9 @@ import { ownershipFor } from './ownership.js';
 import { reachFor, reachWithin, blockGroupsGeoJSON, hasDemographics } from './demographics.js';
 import { getIsochrones, contoursByMinutes, pointInGeometry, hasMapbox } from './isochrone.js';
 import { KEY_FIELDS } from './candidates.js';
+import { newId } from './ids.js';
+
+const CHECK_CREDITS = 1; // the buildable check on one site
 import { specToChips, applyChipEdit, CHIP_CATALOG } from './chips.js';
 import { previewCount, listProjects, getProject, createProject, updateProject, projectHistory, reviewParcel, setSaved, orgSaved, projectCandidates, projectCandidate, REVIEW_STATUSES } from './projects.js';
 import { ensureUser } from './identity.js';
@@ -123,7 +126,7 @@ app.get('/api/projects/:id/candidates/:pin', wrap(async (req, res) => {
   if (!c) throw httpError(404, 'Parcel not found.');
   if (!c.address) c.address_near = await nearRoad(c.pin); // no address: name the closest road (cached)
   const enr = await one('SELECT raw_json, created_at FROM enrichments WHERE parcelnumb = ? ORDER BY id DESC LIMIT 1', [c.pin]);
-  res.json({ ...c, keyFields: KEY_FIELDS, enrichment: enr ? { fields: JSON.parse(enr.raw_json).fields ?? {}, created_at: enr.created_at } : null });
+  res.json({ ...c, keyFields: KEY_FIELDS, checkCredits: CHECK_CREDITS, enrichment: enr ? { fields: JSON.parse(enr.raw_json).fields ?? {}, created_at: enr.created_at } : null });
 }));
 app.patch('/api/projects/:id/reviews/:pin', wrap(async (req, res) => {
   const p = await projectOr404(req.params.id, req);
@@ -238,19 +241,27 @@ app.get('/api/candidates/:pin/profile', wrap(async (req, res) => {
 app.post('/api/candidates/:pin/enrich', wrap(async (req, res) => {
   const c = await one('SELECT pin, lat, lng FROM candidates WHERE pin = ?', [req.params.pin]);
   if (!c) throw httpError(404, 'Candidate not found.');
+  // The buildable check costs credits. Its result is kept and shown to everyone afterwards, and it is charged
+  // only once there is a result to keep.
+  const orgUid = req.user.orgUid;
+  if (!orgUid) throw httpError(403, 'Join an organization before running checks.');
+  const balance = await creditBalance(orgUid);
+  if (balance < CHECK_CREDITS) throw httpError(402, `The buildable check costs ${CHECK_CREDITS} credit; you have ${balance}.`);
   const presets = ['zoning', 'terrain', 'constraints'];
-  const { result, charged } = await enrichParcel({ lat: c.lat, lng: c.lng, presets });
+  const { result } = await enrichParcel({ lat: c.lat, lng: c.lng, presets });
   const status = result.parcel_match?.status ?? 'unknown';
   const matchedId = result.parcel_match?.parcel?.parcelnumb;
-  await run('INSERT INTO enrichments (parcelnumb, presets, match_status, raw_json) VALUES (?, ?, ?, ?)',
+  const enr = await one('INSERT INTO enrichments (parcelnumb, presets, match_status, raw_json) VALUES (?, ?, ?, ?) RETURNING id',
     [c.pin, presets.join(','), status, JSON.stringify(result)]);
+  await run(`INSERT INTO credit_ledger (entry_uid, org_uid, delta, reason, ref, note, created_by) VALUES (?, ?, ?, 'buildable_check', ?, ?, ?)`,
+    [newId('crd'), orgUid, -CHECK_CREDITS, String(enr.id), `Buildable check: parcel ${c.pin}`, req.user.uid ?? null]);
   res.json({
     status,
     samePin: matchedId ? String(matchedId).replace(/\D/g, '') === c.pin : null,
     matchedParcel: matchedId ?? null,
     fields: result.fields ?? {},
-    chargedUsd: charged,
-    spentUsd: await totalSpend(),
+    credits: CHECK_CREDITS,
+    balance: balance - CHECK_CREDITS,
   });
 }));
 

@@ -7,7 +7,7 @@ export const KEY_FIELDS = {
   parcel_slope_frac_over_5pct: 'Share over 5% grade',
   wetland_fraction_of_parcel: 'Wetland share',
   parcel_flood_sfha_fraction: 'Flood zone share',
-  developable_acres_proxy: 'Developable acres (Mireye)',
-  zoning: 'Zoning (Mireye)',
+  developable_acres_proxy: 'Developable acres (estimate)',
+  zoning: 'Zoning',
   zoning_description: 'Zoning description',
 };
