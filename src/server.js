@@ -121,7 +121,7 @@ app.post('/api/drafts/from-text', wrap(async (req, res) => {
   res.json(await draftFromText({ text: req.body?.text, current }));
 }));
 // What a draft would find today, before the project exists (counts only; nothing is saved).
-app.post('/api/drafts/advice', wrap(async (req, res) => res.json(await draftAdvice(req.body?.spec ?? { requirements: [], preferences: [] }))));
+app.post('/api/drafts/advice', wrap(async (req, res) => res.json(await draftAdvice(req.body?.spec ?? { requirements: [], preferences: [] }, { areas: req.body?.areas, bands: req.body?.bands === true }))));
 app.post('/api/drafts/interview', wrap(async (req, res) => res.json(await interviewTurn({ messages: req.body?.messages }))));
 
 app.get('/api/projects/:id/candidates', wrap(async (req, res) => res.json(await projectCandidates(await projectOr404(req.params.id, req), req.query))));

@@ -1,23 +1,68 @@
 [
   {
+    "date": "2026-11-25",
+    "title": "Starting a project is now five steps, each with a live count",
+    "status": "live",
+    "changes": [
+      {
+        "what": "Starting a project is five short steps instead of one text box: what you're building, where, how much land, deal-breakers, and what to rank by. Each step shows how many loaded sites still match.",
+        "why": "The single box gave no hint of what Paydirt can filter on, and felt vague to start from. One question at a time shows the options and their effect before anything is created."
+      },
+      {
+        "what": "The Where step checks each town or county as you add it: loaded, or not loaded with the number of parcels and the credits to unlock it.",
+        "why": "Where to look is the choice that costs credits. It used to come last and on a different screen."
+      },
+      {
+        "what": "The size step shows a small chart of how many sites fall in each size band for the places you chose. Click a bar to use that range.",
+        "why": "Without it you choose a size blind. Seeing where the land actually is makes the range an informed choice."
+      },
+      {
+        "what": "Deal-breakers and ranking are separate steps, and when few sites are left Paydirt names the deal-breaker that is cutting the most.",
+        "why": "A deal-breaker hides sites; a preference only reorders them. Separating the two, and showing what each deal-breaker costs, keeps good sites from being hidden by accident."
+      },
+      {
+        "what": "A pasted brief still works, but it fills in the steps for you to check instead of skipping them.",
+        "why": "A draft you can't inspect step by step is the vagueness this change is meant to remove."
+      },
+      {
+        "what": "The \"vacant land\" filter and ranking now recognise undeveloped land outside King County.",
+        "why": "It matched only King County's wording, so \"vacant land only\" hid every site in Pierce and other counties, and vacant sites there got no ranking credit. Scores for those sites will rise where vacancy is ranked."
+      }
+    ]
+  },
+  {
     "date": "2026-11-24",
     "title": "Zone codes from public maps, zoning rules read from the code, simpler filters",
     "status": "live",
     "changes": [
-      { "what": "Every parcel in unincorporated Pierce County, Gig Harbor and Tacoma now carries its zone code and zone name, joined from the zoning maps those governments publish.",
-        "why": "Pierce County sites all said \"Zoning unknown\". The zone is free public data, so there was no reason to pay for it one site at a time." },
-      { "what": "A site with a zone but no answer has a new button: \"Read this place's zoning rules · 3 credits\". Paydirt reads the city's use table once and answers for every zone there. Answers are stored and shared, so a place is only read once.",
-        "why": "Each city's code had to be read by hand, so only King County and eleven of its cities ever were. Answers are marked as read by Paydirt and not checked by a person, with a link to the code section, because two test reads disagreed on residential zones." },
-      { "what": "Sports-facility zoning answers and labels now show only in projects that filter on them. Other projects see the zone and a plain note that their use has not been read.",
-        "why": "An agritourism project was being shown whether a sports club is allowed, which is the wrong answer to the wrong question." },
-      { "what": "\"Search everywhere unlocked\" beside the area names above the site list. It looks past the project's areas at all loaded land, and one more click goes back.",
-        "why": "Widening a search meant editing the project's areas. This is a view, not a change to the project, like clearing the boundary on a map search." },
-      { "what": "The filter bar is one fixed row of named buttons (Size, Where, Zoning, On the site, Owner, Families nearby), each showing what is set.",
-        "why": "The old bar mixed must-haves, nice-to-haves and weights in one line and read as clutter. Whether a filter hides or only ranks is still set inside each button." },
-      { "what": "When you describe a new project, Paydirt now says how many sites match today, which filter is cutting the most, and which towns you named are not loaded yet.",
-        "why": "People were creating a project and landing on an empty map with no idea why. The count comes from loaded data, before anything is saved." },
-      { "what": "A change log page, linked as \"What’s new\" under the Feedback button on every page.",
-        "why": "Every push should be explainable in plain words: what changed and why it makes Paydirt better. If we can't write that, the change waits." }
+      {
+        "what": "Every parcel in unincorporated Pierce County, Gig Harbor and Tacoma now carries its zone code and zone name, joined from the zoning maps those governments publish.",
+        "why": "Pierce County sites all said \"Zoning unknown\". The zone is free public data, so there was no reason to pay for it one site at a time."
+      },
+      {
+        "what": "A site with a zone but no answer has a new button: \"Read this place's zoning rules · 3 credits\". Paydirt reads the city's use table once and answers for every zone there. Answers are stored and shared, so a place is only read once.",
+        "why": "Each city's code had to be read by hand, so only King County and eleven of its cities ever were. Answers are marked as read by Paydirt and not checked by a person, with a link to the code section, because two test reads disagreed on residential zones."
+      },
+      {
+        "what": "Sports-facility zoning answers and labels now show only in projects that filter on them. Other projects see the zone and a plain note that their use has not been read.",
+        "why": "An agritourism project was being shown whether a sports club is allowed, which is the wrong answer to the wrong question."
+      },
+      {
+        "what": "\"Search everywhere unlocked\" beside the area names above the site list. It looks past the project's areas at all loaded land, and one more click goes back.",
+        "why": "Widening a search meant editing the project's areas. This is a view, not a change to the project, like clearing the boundary on a map search."
+      },
+      {
+        "what": "The filter bar is one fixed row of named buttons (Size, Where, Zoning, On the site, Owner, Families nearby), each showing what is set.",
+        "why": "The old bar mixed must-haves, nice-to-haves and weights in one line and read as clutter. Whether a filter hides or only ranks is still set inside each button."
+      },
+      {
+        "what": "When you describe a new project, Paydirt now says how many sites match today, which filter is cutting the most, and which towns you named are not loaded yet.",
+        "why": "People were creating a project and landing on an empty map with no idea why. The count comes from loaded data, before anything is saved."
+      },
+      {
+        "what": "A change log page, linked as \"What’s new\" under the Feedback button on every page.",
+        "why": "Every push should be explainable in plain words: what changed and why it makes Paydirt better. If we can't write that, the change waits."
+      }
     ]
   },
   {
@@ -25,12 +70,18 @@
     "title": "Credits everywhere; the buildable check costs 1 credit",
     "status": "live",
     "changes": [
-      { "what": "The slope, wetlands and flood check on a site now reads \"1 credit\" and takes 1 credit. The result is kept, so a site is only paid for again if you ask for a fresh check.",
-        "why": "It showed a dollar price and charged nothing. Paydirt prices everything in credits, and a paid check that is free by accident is a bill we absorb without knowing." },
-      { "what": "Removed the old \"Paid search\" tab and every dollar amount from messages.",
-        "why": "The tab was left from the first version of Paydirt and showed our own costs. Nothing in the current flow used it." },
-      { "what": "Field labels no longer name the data provider.",
-        "why": "You are buying an answer, not a vendor. Naming the supplier on a label adds nothing a buyer can act on." }
+      {
+        "what": "The slope, wetlands and flood check on a site now reads \"1 credit\" and takes 1 credit. The result is kept, so a site is only paid for again if you ask for a fresh check.",
+        "why": "It showed a dollar price and charged nothing. Paydirt prices everything in credits, and a paid check that is free by accident is a bill we absorb without knowing."
+      },
+      {
+        "what": "Removed the old \"Paid search\" tab and every dollar amount from messages.",
+        "why": "The tab was left from the first version of Paydirt and showed our own costs. Nothing in the current flow used it."
+      },
+      {
+        "what": "Field labels no longer name the data provider.",
+        "why": "You are buying an answer, not a vendor. Naming the supplier on a label adds nothing a buyer can act on."
+      }
     ]
   },
   {
@@ -38,12 +89,18 @@
     "title": "Projects own their search areas; one place to unlock land",
     "status": "live",
     "changes": [
-      { "what": "A project now holds a list of areas (a county, or a town inside a county) instead of town names typed into its filters. The search stays inside those counties.",
-        "why": "A town name alone matched same-named towns elsewhere, so \"Auburn\" could pull in land from the wrong county." },
-      { "what": "\"Where to search\" on the map is the one place to add, remove, unlock or request an area. It shows the price in credits and one main action.",
-        "why": "Unlocking was spread across the map, a menu and the Areas page, each worded differently. People could not tell what was possible or what it would cost." },
-      { "what": "Each county shows five layers of facts (parcels, owners, sales, zoning, environment) and whether an unlock brings all, part or none of each.",
-        "why": "Counties differ a lot in what they publish. Buyers should see what they are getting before they spend credits, not after." }
+      {
+        "what": "A project now holds a list of areas (a county, or a town inside a county) instead of town names typed into its filters. The search stays inside those counties.",
+        "why": "A town name alone matched same-named towns elsewhere, so \"Auburn\" could pull in land from the wrong county."
+      },
+      {
+        "what": "\"Where to search\" on the map is the one place to add, remove, unlock or request an area. It shows the price in credits and one main action.",
+        "why": "Unlocking was spread across the map, a menu and the Areas page, each worded differently. People could not tell what was possible or what it would cost."
+      },
+      {
+        "what": "Each county shows five layers of facts (parcels, owners, sales, zoning, environment) and whether an unlock brings all, part or none of each.",
+        "why": "Counties differ a lot in what they publish. Buyers should see what they are getting before they spend credits, not after."
+      }
     ]
   }
 ]

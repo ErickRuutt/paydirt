@@ -41,6 +41,10 @@ function hasSignal(c, keys) {
   return keys.some((k) => SIGNALS[k]?.test(c, has));
 }
 
+// "Vacant" in the assessor's words: King County says "Vacant (…)", the state land-use codes say "Undeveloped land".
+const VACANT_SQL = "c.present_use ILIKE 'vacant%' OR c.present_use ILIKE '%undeveloped%'";
+const isVacantUse = (u) => /^vacant|undeveloped/i.test(u ?? '');
+
 // Fields a requirement can test.
 export const REQUIREMENT_FIELDS = {
   acres: { label: 'Acres', type: 'range' },
@@ -178,7 +182,7 @@ export function compileSpec(spec) {
       }
       case 'hh200k_10mi': where.push(`COALESCE(c.hh200k_10mi, 0) >= ${wp(r.value)}`); break;
       case 'land_value_per_acre': where.push(`(c.land_value / NULLIF(c.acres, 0)) <= ${wp(r.value)}`); break;
-      case 'vacant': where.push("c.present_use ILIKE 'vacant%'"); break;
+      case 'vacant': where.push(`(${VACANT_SQL})`); break;
       case 'owner_signals': where.push(`(${r.value.map((k) => SIGNALS[k].sql).join(' OR ')})`); break;
       case 'tags_exclude': where.push(`NOT (${r.value.map(tagSql).join(' OR ')})`); break;
       case 'tags_include': where.push(`(${r.value.map(tagSql).join(' OR ')})`); break;
@@ -203,7 +207,7 @@ export function compileSpec(spec) {
         e = `CASE WHEN c.acres BETWEEN ${sp(p.params.min)} AND ${sp(p.params.max)} THEN 100 WHEN c.acres >= ${sp(p.params.min * 0.6)} AND c.acres < ${sp(p.params.min)} THEN ${sp(p.params.nearRange)} ELSE ${sp(p.params.outOfRange)} END`;
         break;
       case 'vacancy':
-        e = `CASE WHEN c.present_use ILIKE 'vacant%' THEN ${sp(p.params.vacant)} WHEN c.present_use ~* 'single family|mobile home|agricultur' THEN ${sp(p.params.lightlyBuilt)} ELSE 0 END`;
+        e = `CASE WHEN ${VACANT_SQL} THEN ${sp(p.params.vacant)} WHEN c.present_use ~* 'single family|mobile home|agricultur' THEN ${sp(p.params.lightlyBuilt)} ELSE 0 END`;
         break;
       case 'owner_signals':
         e = Object.entries(p.params.points).map(([k, v]) => `CASE WHEN ${SIGNALS[k].sql} THEN ${sp(v)} ELSE 0 END`).join(' + ');
@@ -252,7 +256,7 @@ export function failedChecks(spec, c) {
       case 'area': ok = r.value.some((a) => `${c.city ?? ''} ${c.postal_city ?? ''}`.toLowerCase().includes(a.toLowerCase())); break;
       case 'hh200k_10mi': ok = (c.hh200k_10mi ?? 0) >= r.value; break;
       case 'land_value_per_acre': ok = c.acres && c.land_value != null ? c.land_value / c.acres <= r.value : false; break;
-      case 'vacant': ok = /^vacant/i.test(c.present_use ?? ''); break;
+      case 'vacant': ok = isVacantUse(c.present_use); break;
       case 'owner_signals': ok = hasSignal(c, r.value); break;
       case 'tags_exclude': ok = !r.value.some(tagged); break;
       case 'tags_include': ok = r.value.some(tagged); break;

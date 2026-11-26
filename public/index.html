@@ -29,17 +29,16 @@
 <main class="page-in">
   <section class="block" id="startBox">
     <div class="block-head"><h1 class="title"><i class="tilt" aria-hidden="true"></i>new project</h1></div>
-    <div class="startOne">
-      <label for="startText" class="lbl">Describe the site you're looking for</label>
-      <textarea id="startText" rows="4" placeholder="e.g. 13–15 acres for youth sports fields, within 30 minutes of Redmond or Sammamish, near families with $200k+ incomes. Vacant land preferred."></textarea>
+    <div class="startOne" id="wiz">
+      <ol id="wizSteps" class="wizSteps" aria-label="Steps"></ol>
+      <div id="wizBody" class="wizBody"></div>
+      <p id="wizCount" class="wizCount" role="status" aria-live="polite"></p>
       <div class="startActions">
-        <button id="startGo" type="button">Draft my project</button>
-        <label class="fileLink"><input id="startFile" type="file" accept=".md,.markdown,.txt,text/plain,text/markdown"> or upload a brief</label>
-        <button type="button" class="expert linkish" data-blank>Set criteria yourself →</button>
+        <button id="wizBack" type="button" class="secondary" hidden>Back</button>
+        <button id="wizNext" type="button">Next</button>
+        <button type="button" class="expert linkish" data-blank>Skip the steps and set filters on the map →</button>
       </div>
       <p id="startMsg" class="msg" role="status"></p>
-      <ol class="howItWorks"><li><b>Describe</b> the site in your own words.</li><li><b>See</b> every parcel in the county ranked for it.</li><li><b>Save</b> the best with ☆ and track each owner.</li></ol>
-      <div id="startOut"></div>
     </div>
   </section>
 

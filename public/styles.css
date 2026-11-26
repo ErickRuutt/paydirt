@@ -726,3 +726,37 @@ table.compare tbody th.lbl { width: 180px; }
 .changeList { display: grid; gap: var(--sp-4); margin: 0; padding: 0; list-style: none; max-width: 80ch; }
 .changeList .what { margin: 0; font-weight: 600; }
 .changeList .why { margin: var(--sp-1) 0 0; color: var(--muted); }
+
+/* New project: five steps, one question each. */
+.wizSteps { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); margin: 0; padding: 0; list-style: none; counter-reset: w; }
+.wizSteps li { counter-increment: w; }
+.wizSteps button { padding: var(--sp-1) 0; background: none; color: var(--muted); font-weight: 400; }
+.wizSteps button::before { content: counter(w) "  "; color: var(--accent); font-weight: 800; }
+.wizSteps button:hover:not(:disabled) { background: none; text-decoration: underline; }
+.wizSteps .on button { color: var(--fg); font-weight: 700; box-shadow: inset 0 calc(-1 * var(--mark)) 0 var(--accent); }
+.wizSteps .done button { color: var(--fg); }
+.wizBody { display: grid; gap: var(--sp-3); padding: var(--sp-4) 0; border-top: var(--rule) solid var(--fg); }
+.wizQ { margin: 0; font-size: var(--fs-h3); }
+.wizOpts, .wizSet { display: grid; gap: var(--sp-2); margin: 0; padding: 0; border: 0; }
+.wizSet legend { padding: 0; margin-bottom: var(--sp-1); font-weight: 600; }
+.wizOpt { display: grid; grid-template-columns: 20px minmax(0, 1fr); flex-direction: row; align-items: start; gap: var(--sp-3); padding: var(--sp-3); background: var(--surface); cursor: pointer; }
+.wizOpt:has(input:checked) { outline: var(--rule) solid var(--fg); outline-offset: calc(-1 * var(--rule)); }
+.wizOpt input { width: 16px; height: 16px; margin-top: 3px; }
+.wizOpt span { display: grid; gap: var(--sp-half); }
+.wizOpt small { color: var(--muted); font-size: var(--fs-small); font-weight: 400; }
+.wizBrief summary { color: var(--link); cursor: pointer; }
+.wizBrief textarea { margin: var(--sp-2) 0; }
+.wizPlace { display: flex; gap: var(--sp-2); }
+.wizPlace input { flex: 1; }
+.wizPlaces { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.wizPlaces li { padding: var(--sp-2) var(--sp-3); background: var(--surface); }
+.wizSize { max-width: 420px; }
+.wizBands { display: flex; align-items: flex-end; gap: var(--sp-2); }
+.wizBand { display: grid; justify-items: center; gap: var(--sp-half); min-width: 64px; height: auto; padding: var(--sp-2); background: var(--surface); color: var(--fg); }
+.wizBand .bar { display: flex; align-items: flex-end; height: 64px; }
+.wizBand .bar i { display: block; width: 28px; min-height: 2px; background: var(--accent); }
+.wizBand small { color: var(--muted); font-weight: 400; }
+.wizCount { margin: 0; padding: var(--sp-2) var(--sp-3); border-left: var(--mark) solid var(--accent); min-height: 1.5em; }
+.wizCount:empty { display: none; }
+.wizReview { display: grid; gap: var(--sp-2); padding-top: var(--sp-3); border-top: var(--rule) solid var(--fg); }
+.wizReview ul { margin: 0; padding-left: var(--sp-4); }
